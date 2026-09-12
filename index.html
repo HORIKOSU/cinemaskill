@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1c2440">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f3d68'/%3E%3Ctext x='32' y='42' font-size='32' text-anchor='middle'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<title>Cinemaskill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f3f0; --panel:#fffefb; --line:#e6e1da; --ink:#20232e; --muted:#7c7a74;
+    --accent:#2f3d68; --accent-dk:#1c2440; --accent-soft:#dde1ee;
+    --want:#3f8a76; --watching:#c9903f; --done:#6b4f9a;
+    --shadow:0 4px 18px rgba(28,36,64,.10);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;overflow-x:clip;width:100%;max-width:100%}
+  body.sheet-open{overflow:hidden}
+  body{
+    font-family:'M PLUS Rounded 1c',-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
+    background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased;
+    padding-bottom:calc(96px + env(safe-area-inset-bottom));
+    line-height:1.5;
+  }
+  header.app{ background:var(--bg); padding:calc(12px + env(safe-area-inset-top)) 16px 0; }
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .brand .logo{font-size:22px}
+  .brand h1{font-size:19px;margin:0;font-weight:800;letter-spacing:.02em}
+  .brand .total{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;text-align:right;line-height:1.25}
+  .brand .total b{font-size:13px;color:var(--accent-dk);font-weight:800}
+  .skillbtn{margin-left:8px;border:none;background:var(--accent-soft);color:var(--accent-dk);font-family:inherit;font-weight:800;font-size:12.5px;padding:7px 13px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .skillbtn:active{transform:scale(.95)}
+
+  /* hero */
+  .hero-stat{position:relative;overflow:hidden;margin:2px 0 16px;padding:20px 18px;border-radius:20px;text-align:center;color:#fff;
+    background:linear-gradient(135deg,#3d4d80,#1c2440);box-shadow:0 8px 22px rgba(28,36,64,.32)}
+  .hero-stat::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(circle at 14% 22%, rgba(255,255,255,.18) 0 3px, transparent 4px),
+                      radial-gradient(circle at 88% 18%, rgba(255,255,255,.14) 0 2.5px, transparent 3.5px),
+                      radial-gradient(circle at 78% 82%, rgba(255,255,255,.12) 0 3px, transparent 4px),
+                      radial-gradient(circle at 22% 86%, rgba(255,255,255,.14) 0 2.5px, transparent 3.5px)}
+  .hero-num{position:relative;font-size:44px;font-weight:900;line-height:1;letter-spacing:-.02em;
+    animation:heroPop .45s cubic-bezier(.34,1.56,.64,1)}
+  .hero-num small{font-size:16px;font-weight:700;margin-left:3px;opacity:.85}
+  .hero-label{position:relative;font-size:13px;font-weight:800;margin-top:5px;opacity:.95}
+  @keyframes heroPop{0%{transform:scale(.72);opacity:0}100%{transform:scale(1);opacity:1}}
+  .hero-split{position:relative;margin-top:16px}
+  .hero-split-bar{height:10px;border-radius:999px;background:rgba(255,255,255,.18);overflow:hidden;display:flex}
+  .hero-split-bar .seg{height:100%}
+  .hero-split-label{margin-top:8px;font-size:12.5px;font-weight:700;opacity:.92}
+  .hero-sub-row{position:relative;display:flex;justify-content:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .hero-chip{font-size:12px;font-weight:800;background:rgba(255,255,255,.18);padding:6px 13px;border-radius:999px}
+
+  .tabs{ display:flex;gap:6px; position:sticky; top:0; z-index:20; padding:8px 16px; background:rgba(244,243,240,.92); backdrop-filter:saturate(1.2) blur(8px); border-bottom:1px solid var(--line); }
+  .tab{ flex:1 1 0; min-width:0; border:none;cursor:pointer;font-family:inherit; padding:9px 4px; border-radius:13px; background:var(--accent-soft); color:var(--accent-dk); font-size:12.5px;font-weight:800; line-height:1.15; display:flex;flex-direction:column;align-items:center;gap:4px; transition:background .15s,color .15s,transform .06s; }
+  .tab:active{transform:scale(.95)}
+  .tab .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .tab .cnt{ display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;padding:0 6px; border-radius:999px;background:rgba(28,36,64,.14);color:inherit;font-size:11px;font-weight:800; }
+  .tab[aria-selected="true"]{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(28,36,64,.28)}
+  .tab[aria-selected="true"] .cnt{background:rgba(255,255,255,.3);color:#fff}
+
+  main{max-width:720px;margin:0 auto;padding:14px 14px 0;overflow-x:hidden}
+
+  .chips{display:flex;gap:7px;margin:2px 2px 12px;flex-wrap:wrap}
+  .chip{border:1.5px solid var(--line);background:var(--panel);color:var(--muted);font-family:inherit;font-weight:700;font-size:12.5px;padding:7px 13px;border-radius:999px;cursor:pointer}
+  .chip.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-dk)}
+  .chip:active{transform:scale(.96)}
+
+  .toolbar{display:flex;gap:8px;margin:4px 2px 14px}
+  .search{ flex:1;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line); border-radius:12px;padding:9px 12px; }
+  .search input{border:none;outline:none;background:transparent;font-size:15px;width:100%;color:var(--ink);font-family:inherit}
+  .search svg{flex:0 0 auto;opacity:.5}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .grid.slide-r,.grid.slide-l{animation:shelfIn .18s ease}
+  @keyframes shelfIn{from{opacity:.35}to{opacity:1}}
+  @media (prefers-reduced-motion: reduce){ .grid.slide-r,.grid.slide-l{animation:none} }
+  .card{ display:flex;flex-direction:column;gap:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius); padding:8px;box-shadow:var(--shadow);position:relative;overflow:hidden;cursor:pointer; touch-action:manipulation; }
+  .cover{ flex:none;width:100%;height:auto;aspect-ratio:2/3;border-radius:8px;object-fit:cover;background:var(--accent-soft); box-shadow:0 2px 6px rgba(0,0,0,.12); }
+  .cover.ph{display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--accent-dk);opacity:.55}
+  .info{flex:1;min-width:0;display:flex;flex-direction:column;margin-top:7px}
+  .info .title{font-size:12px;font-weight:800;line-height:1.32;margin:0 0 3px;min-height:31.7px; display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .info .meta{font-size:10.5px;color:var(--muted);line-height:1.4;min-height:14.7px; display:flex;align-items:center;gap:4px}
+  .type-badge{display:inline-block;font-size:9.5px;font-weight:800;padding:1.5px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent-dk);white-space:nowrap}
+  .priority-row{display:flex;gap:3px;margin:6px -4px -4px}
+  .priority-star{display:flex;align-items:center;justify-content:center;flex:1;min-width:0;height:30px;font-size:15px; line-height:1;color:#dcdce6;cursor:pointer;touch-action:manipulation}
+  .priority-star.filled{color:#c2a26c}
+  .priority-star.filled.rate{color:#b8863f}
+  .priority-star:active{transform:scale(1.2)}
+  .badge{position:absolute;left:9px;top:9px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+
+  .empty{text-align:center;color:var(--muted);padding:56px 20px}
+  .empty .big{font-size:44px;opacity:.5;margin-bottom:8px}
+  .empty p{margin:4px 0;font-size:14px}
+
+  .fab{ position:fixed;left:50%;transform:translateX(-50%); bottom:calc(20px + env(safe-area-inset-bottom));z-index:30; display:flex;align-items:center;gap:9px; background:var(--accent);color:#fff;border:none;cursor:pointer; padding:15px 26px;border-radius:999px;font-size:16px;font-weight:800;font-family:inherit; box-shadow:0 8px 24px rgba(28,36,64,.42); }
+  .fab:active{background:var(--accent-dk)}
+  .fab svg{width:20px;height:20px}
+
+  .overlay{ position:fixed;inset:0;z-index:50;background:rgba(14,16,28,.55); display:none;align-items:flex-end;justify-content:center; }
+  .overlay.on{display:flex}
+  .sheet{ width:100%;max-width:560px;background:var(--panel);border-radius:20px 20px 0 0; padding:8px 18px calc(20px + env(safe-area-inset-bottom));animation:up .22s ease;max-height:92vh; overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y; }
+  @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  .grip{width:40px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 14px}
+  .sheet h2{font-size:17px;margin:0 0 12px}
+
+  .shelf-choices{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:6px}
+  .shelf-choices.two{grid-template-columns:1fr 1fr}
+  .shelf-btn,.type-btn{ display:flex;align-items:center;gap:7px;justify-content:center; border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:13px 8px;cursor:pointer; font-size:13px;font-weight:800;color:var(--ink);font-family:inherit; }
+  .shelf-btn:active,.type-btn:active{transform:scale(.98)}
+  .shelf-btn .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .shelf-btn.cur,.type-btn.cur{border-color:var(--accent);background:var(--accent-soft)}
+
+  .ddr{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .ddr-label{font-size:12.5px;font-weight:800;color:var(--muted)}
+  .ddr-val{flex:1;font-size:13.5px;font-weight:700;color:var(--ink)}
+  .ddr-edit{border:1.5px solid var(--line);background:#fff;color:var(--ink);font-family:inherit;font-weight:700;font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer}
+  .ddr-edit:active{transform:scale(.97)}
+  .ddr-editbox{display:none;align-items:center;gap:8px;margin-top:10px}
+  .ddr-editbox.on{display:flex}
+  .ddr-editbox input[type=date]{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font-family:inherit;font-size:13.5px;color:var(--ink);background:#fff}
+  .ddr-editbox .btn{display:inline-block;width:auto;padding:9px 14px;font-size:13px;margin:0;white-space:nowrap}
+
+  .btn{ display:block;width:100%;text-align:center;border:none;border-radius:12px;padding:14px; font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:10px; }
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.ghost{background:transparent;color:var(--muted)}
+  .btn.danger{background:#fff;color:#c0392b;border:1.5px solid #edd0cc}
+
+  .field{margin:12px 0}
+  .field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:5px}
+  .field input,.field textarea{ width:100%;border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;font-size:16px; font-family:inherit;color:var(--ink);background:#fff;outline:none; }
+  .field textarea{resize:vertical;min-height:70px;line-height:1.6}
+  .field input:focus,.field textarea:focus{border-color:var(--accent)}
+
+  .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:16px 2px}
+  .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+  .search-row{display:flex;gap:8px}
+  .search-row input{ flex:1;border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;font-size:16px; font-family:inherit;color:var(--ink);background:#fff;outline:none;min-width:0; }
+  .search-row input:focus{border-color:var(--accent)}
+  .btn.sbtn{width:auto;margin-top:0;padding:13px 18px;flex:0 0 auto}
+  .searching{color:var(--muted);font-size:13.5px;padding:18px 4px;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px}
+  .keynote{background:var(--accent-soft);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--accent-dk);line-height:1.7;margin:10px 0}
+  .keynote a{color:var(--accent-dk);font-weight:800;cursor:pointer;text-decoration:underline}
+  .res{display:flex;gap:11px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer;background:#fff}
+  .res:active{background:var(--accent-soft)}
+  .res .rescover{width:44px;height:66px;flex:0 0 auto;border-radius:6px;object-fit:cover;box-shadow:0 1px 4px rgba(0,0,0,.12);background:var(--accent-soft)}
+  .res .rescover.ph{display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-dk);opacity:.5}
+  .resinfo{min-width:0;flex:1}
+  .restitle{font-size:14px;font-weight:800;line-height:1.35;margin-bottom:3px; display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .resmeta{font-size:12px;color:var(--muted);line-height:1.45;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+
+  .prev{display:flex;gap:14px;align-items:flex-start;margin:6px 0 16px}
+  .prev .cover{width:74px;height:111px;flex:0 0 auto}
+  .prev .t{font-size:16px;font-weight:800;margin:0 0 5px;line-height:1.35}
+  .prev .m{font-size:12.5px;color:var(--muted);line-height:1.55;max-height:6.2em;overflow:hidden}
+  .detail-star-wrap{display:flex;align-items:center;gap:12px;margin:12px 0 4px;padding:10px 12px; background:var(--accent-soft);border-radius:12px}
+  .dp-label{font-size:12.5px;font-weight:800;color:var(--accent-dk);flex:0 0 auto}
+  .detail-stars{display:flex;gap:6px;flex:0 0 auto}
+  .detail-stars .priority-star{flex:0 0 auto;width:32px;height:32px;font-size:22px;color:#d3cfe4}
+
+  .hist-wrap{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .hist-title{font-size:11.5px;font-weight:800;color:var(--muted);margin-bottom:7px}
+  .hist-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink);padding:3px 0}
+  .hist-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .hist-label{flex:1;min-width:0}
+  .hist-date{color:var(--muted);font-size:11.5px;white-space:nowrap}
+
+  .genre-bars{display:flex;flex-direction:column;gap:11px;margin-top:6px}
+  .gb-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;gap:8px}
+  .gb-name{font-size:13px;font-weight:700;color:var(--ink)}
+  .gb-cnt{font-size:11.5px;color:var(--muted);font-weight:700}
+  .gb-track{height:9px;border-radius:999px;background:var(--accent-soft);overflow:hidden}
+  .gb-fill{height:100%;border-radius:999px;background:var(--accent);transition:width .5s cubic-bezier(.22,.61,.36,1)}
+  .sk-summary{display:flex;justify-content:space-around;text-align:center;gap:8px;margin:2px 0 16px}
+  .sk-summary .sk-big{display:block;font-size:22px;font-weight:800;color:var(--ink);line-height:1.1}
+  .sk-summary .sk-cap{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.3}
+
+  /* monthly graph */
+  .mo-head{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px}
+  .mo-year-btn{border:1.5px solid var(--line);background:#fff;color:var(--accent-dk);font-family:inherit;font-weight:800;font-size:15px;width:32px;height:32px;border-radius:10px;cursor:pointer;line-height:1}
+  .mo-year-btn:active{transform:scale(.94)}
+  .mo-year-btn:disabled{opacity:.35;cursor:default}
+  .mo-year-label{font-size:14px;font-weight:800;color:var(--ink)}
+  .mo-graph{display:flex;align-items:flex-end;gap:5px;height:110px;padding:0 2px 2px}
+  .mo-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+  .mo-bar-wrap{flex:1;display:flex;align-items:flex-end;width:100%}
+  .mo-bar{width:100%;border-radius:5px 5px 2px 2px;background:var(--accent-soft);min-height:3px;transition:height .4s cubic-bezier(.22,.61,.36,1)}
+  .mo-bar.cur{background:var(--accent)}
+  .mo-cnt{font-size:10px;font-weight:800;color:var(--muted);min-height:12px}
+  .mo-lbl{font-size:10px;color:var(--muted);white-space:nowrap}
+  .mo-total{font-size:11.5px;color:var(--muted);text-align:center;margin-top:2px}
+
+  /* watch providers */
+  .wp-wrap{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .wp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .wp-title{font-size:12.5px;font-weight:800;color:var(--muted)}
+  .wp-refresh{border:none;background:none;color:var(--accent-dk);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0}
+  .wp-group{margin-bottom:9px}
+  .wp-group-label{font-size:11px;color:var(--muted);font-weight:700;margin-bottom:5px}
+  .wp-logos{display:flex;flex-wrap:wrap;gap:7px}
+  .wp-logo{width:34px;height:34px;border-radius:9px;object-fit:cover;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+  .wp-empty{font-size:12px;color:var(--muted)}
+  .wp-attr{font-size:10px;color:var(--muted);margin-top:8px}
+  .wp-attr a{color:var(--muted)}
+
+  .data-footer{text-align:center;font-size:11.5px;color:var(--muted);margin:22px 0 10px;padding-top:14px;border-top:1px solid var(--line);line-height:1.8}
+  .data-footer a{color:var(--muted);text-decoration:underline;cursor:pointer}
+
+  .spinner{width:16px;height:16px;border:2px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));z-index:80; background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-size:13.5px;font-weight:600; box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;max-width:88%;text-align:center}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(-6px)}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <span class="logo">🎬</span>
+    <h1>Cinemaskill</h1>
+    <span class="total" id="totalCount"></span>
+    <button class="skillbtn" id="trendBtn">📊 傾向</button>
+  </div>
+</header>
+<div class="tabs" id="tabs" role="tablist">
+  <button class="tab" role="tab" data-status="want"     aria-selected="true"><span class="lbl">見たい</span><span class="cnt" id="cnt-want">0</span></button>
+  <button class="tab" role="tab" data-status="watching" aria-selected="false"><span class="lbl">観てる</span><span class="cnt" id="cnt-watching">0</span></button>
+  <button class="tab" role="tab" data-status="done"     aria-selected="false"><span class="lbl">観た</span><span class="cnt" id="cnt-done">0</span></button>
+</div>
+
+<main>
+  <div class="hero-stat" id="heroStat"></div>
+  <div class="chips" id="typeChips">
+    <button class="chip cur" data-type="all">すべて</button>
+    <button class="chip" data-type="movie">🎬 映画</button>
+    <button class="chip" data-type="tv">📺 ドラマ</button>
+  </div>
+  <div class="toolbar">
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="search" placeholder="タイトルで絞り込み">
+    </div>
+  </div>
+  <div class="grid" id="list"></div>
+  <div class="data-footer" id="dataFooter">
+    データ：<a id="exportLinkMain">📤 書き出し（バックアップ）</a> ／ <a id="importLinkMain">📥 取り込み</a>
+    <input id="importFileMain" type="file" accept=".json,application/json" style="display:none">
+    <br>この作品情報の提供にはTMDB APIを利用しています（TMDBの公認・保証を受けたものではありません）。配信状況の提供元：JustWatch。
+  </div>
+</main>
+
+<button class="fab" id="fab">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  追加する
+</button>
+
+<div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var STORAGE_KEY="cinemaskill_items_v1";
+  var TMDB_KEY_STORAGE="cinemaskill_tmdb_key";
+  var IMG_BASE="https://image.tmdb.org/t/p/w342";
+
+  var MOVIE_GENRES={28:"アクション",12:"アドベンチャー",16:"アニメーション",35:"コメディ",80:"犯罪",99:"ドキュメンタリー",18:"ドラマ",10751:"ファミリー",14:"ファンタジー",36:"歴史",27:"ホラー",10402:"音楽",9648:"ミステリー",10749:"恋愛",878:"SF",10770:"TVムービー",53:"スリラー",10752:"戦争",37:"西部劇"};
+  var TV_GENRES={10759:"アクション＆アドベンチャー",16:"アニメーション",35:"コメディ",80:"犯罪",99:"ドキュメンタリー",18:"ドラマ",10751:"ファミリー",10762:"キッズ",9648:"ミステリー",10763:"ニュース",10764:"リアリティ",10765:"SF＆ファンタジー",10766:"ソープオペラ",10767:"トーク",10768:"戦争＆政治",37:"西部劇"};
+
+  var STATUS_LABEL={want:"見たい",watching:"観てる",done:"観た"};
+  var STATUS_ORDER=["want","watching","done"];
+
+  /* ---------- state / storage ---------- */
+  var state={ items:[], tab:"want", q:"", typeFilter:"all" };
+
+  function load(){
+    try{
+      var raw=localStorage.getItem(STORAGE_KEY);
+      if(raw){ var data=JSON.parse(raw); state.items=(data&&data.items)||[]; }
+    }catch(e){ state.items=[]; }
+  }
+  function save(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({v:1, items:state.items})); }catch(e){}
+  }
+  function tmdbKey(){ try{ return localStorage.getItem(TMDB_KEY_STORAGE)||""; }catch(e){ return ""; } }
+  function setTmdbKey(v){ try{ localStorage.setItem(TMDB_KEY_STORAGE, v); }catch(e){} }
+
+  function uid(){ return "i_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8); }
+  function nowIso(){ return new Date().toISOString(); }
+  function todayStr(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+  function genreDict(mediaType){ return mediaType==="movie" ? MOVIE_GENRES : TV_GENRES; }
+  function genreNamesOf(item){
+    var dict=genreDict(item.mediaType);
+    return (item.genreIds||[]).map(function(id){return dict[id];}).filter(Boolean);
+  }
+
+  /* ---------- history ---------- */
+  function pushHistory(item, status){
+    item.history=item.history||[];
+    item.history.push({status:status, at:nowIso()});
+  }
+
+  /* ---------- derived ---------- */
+  function countsByStatus(){
+    var c={want:0,watching:0,done:0};
+    state.items.forEach(function(it){ if(c[it.status]!==undefined) c[it.status]++; });
+    return c;
+  }
+  function countsByType(){
+    var c={movie:0,tv:0};
+    state.items.forEach(function(it){ if(c[it.mediaType]!==undefined) c[it.mediaType]++; });
+    return c;
+  }
+
+  /* ---------- rendering: hero ---------- */
+  function renderHero(){
+    var c=countsByStatus(), t=countsByType();
+    var total=state.items.length;
+    var movieW = total ? Math.round(t.movie/total*1000)/10 : 0;
+    var tvW = total ? (100-movieW) : 0;
+    var h='<div class="hero-num">'+c.done+'<small>作品</small></div>'
+      +'<div class="hero-label">観た作品</div>'
+      +'<div class="hero-split">'
+      +  '<div class="hero-split-bar">'
+      +    (total? '<div class="seg" style="width:'+movieW+'%;background:#7c9fe0"></div><div class="seg" style="width:'+tvW+'%;background:#e0b26b"></div>' : '<div class="seg" style="width:100%;background:rgba(255,255,255,.12)"></div>')
+      +  '</div>'
+      +  '<div class="hero-split-label">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+'</div>'
+      +'</div>'
+      +'<div class="hero-sub-row"><span class="hero-chip">見たい '+c.want+'</span><span class="hero-chip">観てる '+c.watching+'</span></div>';
+    document.getElementById("heroStat").innerHTML=h;
+  }
+
+  /* ---------- rendering: tabs / total ---------- */
+  function renderTabs(){
+    var c=countsByStatus();
+    document.getElementById("cnt-want").textContent=c.want;
+    document.getElementById("cnt-watching").textContent=c.watching;
+    document.getElementById("cnt-done").textContent=c.done;
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
+      t.setAttribute("aria-selected", t.dataset.status===state.tab ? "true":"false");
+    });
+    var total=state.items.length;
+    document.getElementById("totalCount").innerHTML = total ? ("登録 <b>"+total+"</b> 件") : "";
+  }
+
+  /* ---------- cover node ---------- */
+  function coverHtml(item, cls){
+    cls = cls||"cover";
+    if(item.posterPath){
+      var icon = item.mediaType==="tv" ? "📺" : "🎬";
+      return '<img class="'+cls+'" src="'+IMG_BASE+item.posterPath+'" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb-icon="'+icon+'" data-fb-cls="'+cls+'" onerror="window.__cmImgFallback(this)">';
+    }
+    return phHtml(item, cls);
+  }
+  function phHtml(item, cls){
+    var icon = item.mediaType==="tv" ? "📺" : "🎬";
+    return '<div class="'+cls+' ph">'+icon+'</div>';
+  }
+  window.__cmImgFallback = function(img){
+    try{
+      var div=document.createElement("div");
+      div.className=(img.getAttribute("data-fb-cls")||"cover")+" ph";
+      div.textContent=img.getAttribute("data-fb-icon")||"🎬";
+      if(img.parentNode) img.parentNode.replaceChild(div, img);
+    }catch(e){}
+  };
+
+  /* ---------- card ---------- */
+  function cardHtml(item){
+    var badgeColor = item.status==="want"?"var(--want)":item.status==="watching"?"var(--watching)":"var(--done)";
+    var typeLabel = item.mediaType==="tv" ? "ドラマ" : "映画";
+    var starsRow="";
+    if(item.status==="want"){
+      starsRow='<div class="priority-row" data-role="priority">'+starsHtml(item.priority||0,false)+'</div>';
+    } else if(item.status==="done"){
+      starsRow='<div class="priority-row" data-role="rating">'+starsHtml(item.rating||0,true)+'</div>';
+    }
+    return '<div class="card" data-id="'+item.id+'">'
+      + '<span class="badge" style="background:'+badgeColor+'"></span>'
+      + coverHtml(item)
+      + '<div class="info">'
+      +   '<div class="title">'+esc(item.title)+'</div>'
+      +   '<div class="meta">'+(item.year?esc(item.year)+"年 ・ ":"")+'<span class="type-badge">'+typeLabel+'</span></div>'
+      + '</div>'
+      + starsRow
+      + '</div>';
+  }
+  function starsHtml(n, isRating){
+    var out="";
+    for(var i=1;i<=5;i++){
+      out+='<span class="priority-star'+(i<=n?(" filled"+(isRating?" rate":"")):"")+'" data-i="'+i+'">★</span>';
+    }
+    return out;
+  }
+
+  /* ---------- list / filter / sort ---------- */
+  function visibleItems(){
+    var list=state.items.filter(function(it){ return it.status===state.tab; });
+    if(state.typeFilter!=="all"){ list=list.filter(function(it){ return it.mediaType===state.typeFilter; }); }
+    if(state.q){
+      var q=state.q.toLowerCase();
+      list=list.filter(function(it){ return (it.title||"").toLowerCase().indexOf(q)>=0; });
+    }
+    list=list.slice().sort(function(a,b){
+      if(state.tab==="want"){
+        var pd=(b.priority||0)-(a.priority||0); if(pd) return pd;
+        return (b.addedAt||"").localeCompare(a.addedAt||"");
+      }
+      if(state.tab==="done"){
+        var da=(a.watchedAt||a.updatedAt||a.addedAt||""), db=(b.watchedAt||b.updatedAt||b.addedAt||"");
+        return db.localeCompare(da);
+      }
+      return (b.updatedAt||b.addedAt||"").localeCompare(a.updatedAt||a.addedAt||"");
+    });
+    return list;
+  }
+
+  function renderList(){
+    var list=visibleItems();
+    var el=document.getElementById("list");
+    if(!list.length){
+      var msg = state.tab==="want" ? "まだ「見たい」作品がありません" : state.tab==="watching" ? "今、観てる作品はありません" : "まだ「観た」作品がありません";
+      el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">🎬</div><p>'+msg+'</p><p>右下の「＋ 追加する」から登録できます</p></div>';
+      return;
+    }
+    el.innerHTML=list.map(cardHtml).join("");
+  }
+
+  function render(){
+    renderTabs();
+    renderHero();
+    renderList();
+  }
+
+  /* ---------- tab / chip switching ---------- */
+  function animateList(dir){
+    var el=document.getElementById("list"); if(!el) return;
+    el.classList.remove("slide-r","slide-l");
+    void el.offsetWidth;
+    el.classList.add(dir>0 ? "slide-r" : "slide-l");
+  }
+  function gotoTab(status){
+    if(!status || status===state.tab) return;
+    var from=STATUS_ORDER.indexOf(state.tab), to=STATUS_ORDER.indexOf(status);
+    var dir=(to>=0 && from>=0) ? (to>from?1:-1) : 1;
+    state.tab=status;
+    render();
+    animateList(dir);
+  }
+
+  /* ---------- sheet helpers ---------- */
+  var overlay=document.getElementById("overlay"), sheet=document.getElementById("sheet");
+  function openSheet(html){ sheet.innerHTML=html; overlay.classList.add("on"); try{sheet.scrollTop=0;}catch(e){} document.body.classList.add("sheet-open"); }
+  function closeSheet(){ overlay.classList.remove("on"); sheet.innerHTML=""; document.body.classList.remove("sheet-open"); }
+  overlay.addEventListener("click",function(e){ if(e.target===overlay) closeSheet(); });
+
+  /* ---------- toast ---------- */
+  var toastEl=document.getElementById("toast"), toastTimer=null;
+  function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("on"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){toastEl.classList.remove("on");},2200); }
+
+  /* ---------- TMDB search ---------- */
+  function searchTMDB(query){
+    var key=tmdbKey();
+    if(!key){ return Promise.reject({code:"NO_KEY"}); }
+    var url="https://api.themoviedb.org/3/search/multi?api_key="+encodeURIComponent(key)
+      +"&query="+encodeURIComponent(query)+"&language=ja-JP&include_adult=false&region=JP";
+    return fetch(url).then(function(r){
+      if(!r.ok){
+        return r.json().catch(function(){return null;}).then(function(j){
+          var err={code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)};
+          throw err;
+        });
+      }
+      return r.json();
+    }).then(function(data){
+      return (data.results||[]).filter(function(it){ return it.media_type==="movie"||it.media_type==="tv"; }).map(function(it){
+        var isMovie = it.media_type==="movie";
+        var dateStr = isMovie ? it.release_date : it.first_air_date;
+        return {
+          tmdbId: it.id,
+          mediaType: isMovie ? "movie":"tv",
+          title: isMovie ? (it.title||it.original_title||"") : (it.name||it.original_name||""),
+          year: (dateStr||"").slice(0,4),
+          overview: it.overview||"",
+          posterPath: it.poster_path||null,
+          genreIds: it.genre_ids||[]
+        };
+      });
+    });
+  }
+
+  /* ---------- TMDB watch providers ---------- */
+  var WP_MAX_AGE_MS = 14*24*60*60*1000; // re-check after 2 weeks (lineups change)
+  function fetchWatchProviders(item){
+    var key=tmdbKey();
+    if(!key || !item.tmdbId) return Promise.reject({code:"NO_KEY"});
+    var url="https://api.themoviedb.org/3/"+item.mediaType+"/"+item.tmdbId+"/watch/providers?api_key="+encodeURIComponent(key);
+    return fetch(url).then(function(r){
+      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
+      return r.json();
+    }).then(function(data){
+      var jp=(data.results&&data.results.JP)||null;
+      function names(arr){ return (arr||[]).map(function(p){ return {name:p.provider_name, logo:p.logo_path}; }); }
+      return { at: nowIso(), flatrate: names(jp&&jp.flatrate), rent: names(jp&&jp.rent), buy: names(jp&&jp.buy), link: (jp&&jp.link)||null };
+    });
+  }
+  function wpLogoUrl(path){ return "https://image.tmdb.org/t/p/w92"+path; }
+  function wpGroupHtml(label, list){
+    if(!list || !list.length) return "";
+    return '<div class="wp-group"><div class="wp-group-label">'+label+'</div><div class="wp-logos">'
+      + list.map(function(p){ return p.logo ? '<img class="wp-logo" src="'+wpLogoUrl(p.logo)+'" alt="'+esc(p.name)+'" title="'+esc(p.name)+'" loading="lazy">' : ''; }).join("")
+      + '</div></div>';
+  }
+  function wpBodyHtml(wp){
+    if(!wp) return "";
+    var body = wpGroupHtml("見放題", wp.flatrate) + wpGroupHtml("レンタル", wp.rent) + wpGroupHtml("購入", wp.buy);
+    if(!body) body = '<div class="wp-empty">日本での配信情報が見つかりませんでした</div>';
+    return body + '<div class="wp-attr">配信情報の提供: <a href="https://www.justwatch.com/" target="_blank" rel="noopener">JustWatch</a></div>';
+  }
+  function renderWpSection(item){
+    var box=document.getElementById("wpBody");
+    if(!box) return;
+    if(item.wp && (Date.now()-new Date(item.wp.at).getTime())<WP_MAX_AGE_MS){
+      box.innerHTML=wpBodyHtml(item.wp);
+      return;
+    }
+    box.innerHTML='<div class="searching"><span class="spinner"></span> 配信状況を確認中…</div>';
+    fetchWatchProviders(item).then(function(wp){
+      item.wp=wp; save();
+      box.innerHTML=wpBodyHtml(wp);
+    }).catch(function(err){
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="wp-empty">TMDB APIキーを設定すると配信状況を確認できます</div>'; return; }
+      box.innerHTML='<div class="wp-empty">配信状況を取得できませんでした</div>';
+    });
+  }
+
+  /* ---------- add sheet ---------- */
+  function openAddSheet(){
+    var key=tmdbKey();
+    var h='<div class="grip"></div><h2>作品を追加</h2>';
+    if(!key){
+      h+='<div class="keynote">TMDB APIキーが未設定です。検索・自動取得を使うには <a id="setKeyLink">キーを設定</a> してください（無料）。<br>キーがなくても下の「手動で追加」は使えます。</div>';
+    }
+    h+='<div class="search-row"><input id="addQ" placeholder="作品名で検索（映画・ドラマ）"><button class="btn primary sbtn" id="doSearchBtn">検索</button></div>'
+      +'<div id="addResults"></div>'
+      +'<div class="or">または</div>'
+      +'<button class="btn ghost" id="manualBtn">🖊 手動で追加する（TMDBにない作品）</button>';
+    openSheet(h);
+    var setKeyLink=document.getElementById("setKeyLink");
+    if(setKeyLink) setKeyLink.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
+    var qEl=document.getElementById("addQ");
+    function doSearch(){
+      var q=(qEl.value||"").trim();
+      if(!q) return;
+      var box=document.getElementById("addResults");
+      box.innerHTML='<div class="searching"><span class="spinner"></span> 検索中…</div>';
+      searchTMDB(q).then(function(list){ renderSearchResults(box, list); })
+        .catch(function(err){
+          if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">先にTMDB APIキーを設定してください。<a id="setKeyLink2">キーを設定</a></div>';
+            var l2=document.getElementById("setKeyLink2"); if(l2) l2.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
+            return;
+          }
+          var code=err&&err.code;
+          var extra = code===401 ? "APIキーが正しくない可能性があります。設定し直してください。" : "通信エラーが発生しました。時間をおいて再度お試しください。";
+          box.innerHTML='<div class="keynote">検索できませんでした（'+esc((err&&err.message)||String(code||""))+'）。<br>'+extra+'</div>';
+        });
+    }
+    document.getElementById("doSearchBtn").onclick=doSearch;
+    qEl.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); doSearch(); } });
+    document.getElementById("manualBtn").onclick=function(){ openManualSheet(); };
+  }
+
+  function renderSearchResults(box, list){
+    if(!list.length){ box.innerHTML='<div class="keynote">見つかりませんでした。別のタイトルで試すか、手動で追加してください。</div>'; return; }
+    box.innerHTML = list.map(function(r,idx){
+      var typeLabel=r.mediaType==="tv"?"ドラマ":"映画";
+      return '<div class="res" data-idx="'+idx+'">'
+        + coverHtml(r,"rescover")
+        + '<div class="resinfo"><div class="restitle">'+esc(r.title)+'</div>'
+        + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(r.year?esc(r.year)+"年":"")+'</div></div>'
+        + '</div>';
+    }).join("");
+    Array.prototype.forEach.call(box.querySelectorAll(".res"),function(el){
+      el.onclick=function(){ openPreview(list[+el.dataset.idx]); };
+    });
+  }
+
+  function openPreview(cand){
+    var typeLabel=cand.mediaType==="tv"?"ドラマ":"映画";
+    var h='<div class="grip"></div>'
+      + '<div class="prev">'+coverHtml(cand)+'<div><div class="t">'+esc(cand.title)+'</div>'
+      + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(cand.year?esc(cand.year)+"年":"")+'</div>'
+      + '<div class="m">'+esc(cand.overview||"（あらすじ情報なし）")+'</div></div></div>'
+      + '<h2 style="font-size:14px;margin-top:4px">棚を選ぶ</h2>'
+      + shelfChoicesHtml(null);
+    openSheet(h);
+    bindShelfChoices(function(status){
+      var item=makeItem(cand, status);
+      state.items.push(item); save(); render(); closeSheet();
+      toast(STATUS_LABEL[status]+"に追加しました");
+    });
+  }
+
+  function makeItem(cand, status){
+    var item={
+      id:uid(), tmdbId:cand.tmdbId||null, mediaType:cand.mediaType||"movie",
+      title:cand.title||"（無題）", year:cand.year||"", overview:cand.overview||"",
+      posterPath:cand.posterPath||null, genreIds:cand.genreIds||[],
+      manual: !cand.tmdbId,
+      status:status, priority:0, rating:0, memo:"",
+      watchedAt: status==="done" ? todayStr() : null,
+      addedAt: nowIso(), updatedAt: nowIso(), history:[], wp:null
+    };
+    pushHistory(item, status);
+    return item;
+  }
+
+  function shelfChoicesHtml(curStatus){
+    var h='<div class="shelf-choices" id="shelfPick">';
+    STATUS_ORDER.forEach(function(s){
+      var color = s==="want"?"var(--want)":s==="watching"?"var(--watching)":"var(--done)";
+      h+='<button class="shelf-btn'+(s===curStatus?" cur":"")+'" data-status="'+s+'"><span class="dot" style="background:'+color+'"></span>'+STATUS_LABEL[s]+'</button>';
+    });
+    h+='</div>';
+    return h;
+  }
+  function bindShelfChoices(onPick){
+    Array.prototype.forEach.call(document.querySelectorAll("#shelfPick .shelf-btn"),function(btn){
+      btn.onclick=function(){ onPick(btn.dataset.status); };
+    });
+  }
+
+  /* ---------- manual add ---------- */
+  function openManualSheet(){
+    var h='<div class="grip"></div><h2>手動で追加</h2>'
+      + '<div class="field"><label>作品名</label><input id="mTitle" placeholder="作品名を入力"></div>'
+      + '<div class="field"><label>種別</label><div class="shelf-choices two" id="mType">'
+      +   '<button class="type-btn cur" data-type="movie">🎬 映画</button>'
+      +   '<button class="type-btn" data-type="tv">📺 ドラマ</button>'
+      + '</div></div>'
+      + '<div class="field"><label>メモ（任意）</label><input id="mMemo" placeholder="気になる理由・進捗など"></div>'
+      + '<h2 style="font-size:14px;margin-top:16px">棚を選ぶ</h2>'
+      + shelfChoicesHtml(null);
+    openSheet(h);
+    var curType="movie";
+    Array.prototype.forEach.call(document.querySelectorAll("#mType .type-btn"),function(btn){
+      btn.onclick=function(){
+        curType=btn.dataset.type;
+        Array.prototype.forEach.call(document.querySelectorAll("#mType .type-btn"),function(b){b.classList.toggle("cur",b===btn);});
+      };
+    });
+    bindShelfChoices(function(status){
+      var title=(document.getElementById("mTitle").value||"").trim();
+      if(!title){ toast("作品名を入力してください"); return; }
+      var memo=(document.getElementById("mMemo").value||"").trim();
+      var item=makeItem({title:title, mediaType:curType, year:"", overview:"", posterPath:null, genreIds:[]}, status);
+      item.memo=memo;
+      state.items.push(item); save(); render(); closeSheet();
+      toast(STATUS_LABEL[status]+"に追加しました");
+    });
+  }
+
+  /* ---------- TMDB key prompt ---------- */
+  function promptTmdbKey(cb){
+    var cur=tmdbKey();
+    var v=window.prompt("TMDB APIキー（v3 auth）を貼り付けてください。\n（空欄でOKを押すと解除します）\n\n取得方法：themoviedb.org でアカウント登録 → 設定 → API → 「APIキー」をコピー。", cur);
+    if(v===null){ if(cb) cb(); return; }
+    setTmdbKey((v||"").trim());
+    toast(v&&v.trim() ? "APIキーを保存しました" : "APIキーを解除しました");
+    if(cb) cb();
+  }
+
+  /* ---------- detail sheet ---------- */
+  function findItem(id){ return state.items.filter(function(it){return it.id===id;})[0]; }
+
+  function historyHtml(item){
+    var hist=(item.history||[]).slice().reverse().slice(0,6);
+    if(!hist.length) return "";
+    var h='<div class="hist-wrap"><div class="hist-title">これまでの記録</div>';
+    hist.forEach(function(entry){
+      var color = entry.status==="want"?"var(--want)":entry.status==="watching"?"var(--watching)":"var(--done)";
+      var d=new Date(entry.at);
+      var dstr = isNaN(d.getTime()) ? "" : (d.getFullYear()+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getDate()).padStart(2,"0"));
+      h+='<div class="hist-row"><span class="hist-dot" style="background:'+color+'"></span><span class="hist-label">'+STATUS_LABEL[entry.status]+'に変更</span><span class="hist-date">'+dstr+'</span></div>';
+    });
+    h+='</div>';
+    return h;
+  }
+
+  function openDetail(id){
+    var item=findItem(id);
+    if(!item) return;
+    var typeLabel=item.mediaType==="tv"?"ドラマ":"映画";
+    var genres=genreNamesOf(item);
+    var h='<div class="grip"></div>'
+      + '<div class="prev">'+coverHtml(item)+'<div><div class="t">'+esc(item.title)+'</div>'
+      + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(item.year?esc(item.year)+"年":"")
+      + (genres.length?(' ・ '+esc(genres.join("／"))):'')+'</div>'
+      + (item.overview? '<div class="m">'+esc(item.overview)+'</div>' : '')
+      + '</div></div>'
+      + '<h2 style="font-size:14px;margin-top:2px">棚を選ぶ</h2>'
+      + shelfChoicesHtml(item.status);
+    if(item.status==="want"){
+      h+='<div class="detail-star-wrap"><span class="dp-label">優先度</span><div class="detail-stars" id="priStars">'+starsHtml(item.priority||0,false)+'</div></div>';
+    } else if(item.status==="done"){
+      h+='<div class="detail-star-wrap"><span class="dp-label">評価</span><div class="detail-stars" id="ratStars">'+starsHtml(item.rating||0,true)+'</div></div>';
+      var wd=item.watchedAt;
+      h+='<div class="ddr"><span class="ddr-label">観た日</span><span class="ddr-val" id="wdVal">'+(wd?esc(wd):"未設定")+'</span><button class="ddr-edit" id="wdEditBtn">編集</button></div>'
+        +'<div class="ddr-editbox" id="wdEditBox"><input type="date" id="wdInput" value="'+esc(wd||todayStr())+'"><button class="btn primary sbtn" id="wdSaveBtn">保存</button></div>';
+    }
+    var memoLabel = item.status==="done" ? "感想・レビュー" : item.status==="watching" ? "メモ（何話まで観たか等）" : "メモ（気になる理由など）";
+    h+='<div class="field"><label>'+memoLabel+'</label><textarea id="memoInput" placeholder="自由にメモできます">'+esc(item.memo||"")+'</textarea></div>';
+    if(item.tmdbId){
+      h+='<div class="wp-wrap"><div class="wp-head"><span class="wp-title">📺 配信状況（日本）</span><button class="wp-refresh" id="wpRefreshBtn">更新</button></div><div id="wpBody"></div></div>';
+    }
+    h+=historyHtml(item);
+    h+='<button class="btn danger" id="delBtn">この作品を削除</button>';
+    h+='<button class="btn ghost" id="closeDetailBtn">閉じる</button>';
+    openSheet(h);
+    if(item.tmdbId){
+      renderWpSection(item);
+      var wpRefreshBtn=document.getElementById("wpRefreshBtn");
+      if(wpRefreshBtn) wpRefreshBtn.onclick=function(){ item.wp=null; renderWpSection(item); };
+    }
+
+    bindShelfChoices(function(status){
+      if(status===item.status) return;
+      item.status=status; item.updatedAt=nowIso();
+      if(status==="done" && !item.watchedAt) item.watchedAt=todayStr();
+      pushHistory(item, status);
+      save(); render();
+      toast(STATUS_LABEL[status]+"に移動しました");
+      openDetail(item.id);
+    });
+    var priStars=document.getElementById("priStars");
+    if(priStars){
+      Array.prototype.forEach.call(priStars.querySelectorAll(".priority-star"),function(st){
+        st.onclick=function(){
+          var v=+st.dataset.i;
+          item.priority = (item.priority===v) ? 0 : v;
+          item.updatedAt=nowIso(); save(); render(); openDetail(item.id);
+        };
+      });
+    }
+    var ratStars=document.getElementById("ratStars");
+    if(ratStars){
+      Array.prototype.forEach.call(ratStars.querySelectorAll(".priority-star"),function(st){
+        st.onclick=function(){
+          var v=+st.dataset.i;
+          item.rating = (item.rating===v) ? 0 : v;
+          item.updatedAt=nowIso(); save(); render(); openDetail(item.id);
+        };
+      });
+    }
+    var wdEditBtn=document.getElementById("wdEditBtn");
+    if(wdEditBtn){
+      wdEditBtn.onclick=function(){ document.getElementById("wdEditBox").classList.add("on"); };
+      document.getElementById("wdSaveBtn").onclick=function(){
+        var v=document.getElementById("wdInput").value;
+        item.watchedAt=v||todayStr(); item.updatedAt=nowIso(); save(); render(); openDetail(item.id);
+      };
+    }
+    var memoInput=document.getElementById("memoInput");
+    memoInput.addEventListener("input",function(){ item.memo=memoInput.value; item.updatedAt=nowIso(); });
+    memoInput.addEventListener("blur",function(){ save(); });
+    document.getElementById("delBtn").onclick=function(){
+      state.items=state.items.filter(function(x){return x.id!==item.id;});
+      save(); render(); closeSheet(); toast("削除しました");
+    };
+    document.getElementById("closeDetailBtn").onclick=function(){ save(); closeSheet(); };
+  }
+
+  /* ---------- monthly graph ---------- */
+  function monthDateOf(item){
+    var s = item.watchedAt || (item.status==="done" ? item.updatedAt : null) || item.addedAt;
+    return s ? new Date(s) : null;
+  }
+  function monthlyCounts(year){
+    var counts=new Array(12).fill(0);
+    state.items.forEach(function(it){
+      if(it.status!=="done") return;
+      var d=monthDateOf(it);
+      if(!d || isNaN(d.getTime())) return;
+      if(d.getFullYear()===year) counts[d.getMonth()]++;
+    });
+    return counts;
+  }
+  function minDoneYear(){
+    var years=state.items.filter(function(it){return it.status==="done";}).map(function(it){
+      var d=monthDateOf(it); return (d && !isNaN(d.getTime())) ? d.getFullYear() : null;
+    }).filter(function(y){return y!==null;});
+    if(!years.length) return new Date().getFullYear();
+    return Math.min.apply(null, years);
+  }
+  function monthlyGraphHtml(year){
+    var counts=monthlyCounts(year);
+    var max=Math.max.apply(null, counts.concat([1]));
+    var total=counts.reduce(function(a,b){return a+b;},0);
+    var curYear=new Date().getFullYear(), curMonth=new Date().getMonth();
+    var minYear=minDoneYear();
+    var h='<div class="mo-head"><button class="mo-year-btn" id="moPrev"'+(year<=minYear?" disabled":"")+'>‹</button><span class="mo-year-label">'+year+'年</span><button class="mo-year-btn" id="moNext"'+(year>=curYear?" disabled":"")+'>›</button></div>';
+    h+='<div class="mo-graph">';
+    for(var m=0;m<12;m++){
+      var hp = counts[m] ? Math.max(Math.round(counts[m]/max*100),6) : 2;
+      var isCur = (year===curYear && m===curMonth);
+      h+='<div class="mo-col"><span class="mo-cnt">'+(counts[m]||"")+'</span><div class="mo-bar-wrap"><div class="mo-bar'+(isCur?" cur":"")+'" style="height:'+hp+'%"></div></div><span class="mo-lbl">'+(m+1)+'</span></div>';
+    }
+    h+='</div><div class="mo-total">'+year+'年間で '+total+'本</div>';
+    return h;
+  }
+  function bindMonthlyNav(year){
+    var prev=document.getElementById("moPrev"), next=document.getElementById("moNext");
+    if(prev) prev.onclick=function(){ if(prev.disabled) return; year-=1; document.getElementById("moSection").innerHTML=monthlyGraphHtml(year); bindMonthlyNav(year); };
+    if(next) next.onclick=function(){ if(next.disabled) return; year+=1; document.getElementById("moSection").innerHTML=monthlyGraphHtml(year); bindMonthlyNav(year); };
+  }
+
+  /* ---------- trend sheet ---------- */
+  function computeGenreStats(){
+    var counts={};
+    state.items.forEach(function(it){
+      genreNamesOf(it).forEach(function(name){ counts[name]=(counts[name]||0)+1; });
+    });
+    var arr=Object.keys(counts).map(function(k){return {name:k,count:counts[k]};});
+    arr.sort(function(a,b){return b.count-a.count;});
+    return arr.slice(0,8);
+  }
+  function openTrendSheet(){
+    var c=countsByStatus(), t=countsByType();
+    var total=state.items.length;
+    var movieW = total ? Math.round(t.movie/total*1000)/10 : 0;
+    var tvW = total ? (100-movieW) : 0;
+    var stats=computeGenreStats();
+    var maxCnt=stats.length?stats[0].count:1;
+    var h='<div class="grip"></div><h2>📊 視聴の傾向</h2>'
+      + '<div class="sk-summary">'
+      +   '<div><span class="sk-big">'+c.want+'</span><span class="sk-cap">見たい</span></div>'
+      +   '<div><span class="sk-big">'+c.watching+'</span><span class="sk-cap">観てる</span></div>'
+      +   '<div><span class="sk-big">'+c.done+'</span><span class="sk-cap">観た</span></div>'
+      + '</div>'
+      + '<div class="hero-split" style="margin-bottom:18px">'
+      +   '<div class="hero-split-bar" style="background:var(--accent-soft)">'
+      +     (total? '<div class="seg" style="width:'+movieW+'%;background:#7c9fe0"></div><div class="seg" style="width:'+tvW+'%;background:#e0b26b"></div>' : '')
+      +   '</div>'
+      +   '<div class="hero-split-label" style="color:var(--muted)">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+'（登録全体）</div>'
+      + '</div>';
+    var curYear=new Date().getFullYear();
+    h+='<h2 style="font-size:14px">月別の視聴数（観た作品）</h2><div id="moSection">'+monthlyGraphHtml(curYear)+'</div>';
+    if(stats.length){
+      h+='<h2 style="font-size:14px">ジャンル内訳（登録作品より）</h2><div class="genre-bars">';
+      stats.forEach(function(s){
+        var w=Math.round(s.count/maxCnt*100);
+        h+='<div><div class="gb-head"><span class="gb-name">'+esc(s.name)+'</span><span class="gb-cnt">'+s.count+'件</span></div><div class="gb-track"><div class="gb-fill" style="width:'+w+'%"></div></div></div>';
+      });
+      h+='</div>';
+    } else {
+      h+='<div class="keynote">TMDB検索で作品を追加すると、ジャンルの傾向がここに表示されます。</div>';
+    }
+    h+='<button class="btn ghost" id="trendCloseBtn">閉じる</button>';
+    openSheet(h);
+    document.getElementById("trendCloseBtn").onclick=closeSheet;
+    bindMonthlyNav(curYear);
+  }
+
+  /* ---------- export / import ---------- */
+  function exportItems(){
+    var blob=new Blob([JSON.stringify({v:1, exportedAt:nowIso(), items:state.items},null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    var d=new Date(); var stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+    a.href=url; a.download="cinemaskill_backup_"+stamp+".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},2000);
+  }
+  function importItems(data){
+    var incoming=(data&&data.items)||[];
+    var existingIds={}; state.items.forEach(function(it){existingIds[it.id]=true;});
+    var added=0, skipped=0;
+    incoming.forEach(function(it){
+      if(!it||!it.id||existingIds[it.id]){ skipped++; return; }
+      state.items.push(it); existingIds[it.id]=true; added++;
+    });
+    save();
+    return {added:added, skipped:skipped};
+  }
+
+  /* ---------- events ---------- */
+  document.getElementById("tabs").addEventListener("click",function(e){
+    var t=e.target.closest(".tab"); if(!t) return; gotoTab(t.dataset.status);
+  });
+  document.getElementById("typeChips").addEventListener("click",function(e){
+    var c=e.target.closest(".chip"); if(!c) return;
+    state.typeFilter=c.dataset.type;
+    Array.prototype.forEach.call(document.querySelectorAll("#typeChips .chip"),function(b){b.classList.toggle("cur",b===c);});
+    renderList();
+  });
+  document.getElementById("search").addEventListener("input",function(e){ state.q=e.target.value; renderList(); });
+  document.getElementById("list").addEventListener("click",function(e){
+    var starEl=e.target.closest(".priority-star");
+    var card=e.target.closest(".card");
+    if(!card) return;
+    var id=card.dataset.id;
+    if(starEl){
+      var row=starEl.closest(".priority-row");
+      var item=findItem(id);
+      var v=+starEl.dataset.i;
+      if(row.dataset.role==="priority"){ item.priority=(item.priority===v)?0:v; }
+      else { item.rating=(item.rating===v)?0:v; }
+      item.updatedAt=nowIso(); save(); renderList();
+      return;
+    }
+    openDetail(id);
+  });
+  document.getElementById("fab").addEventListener("click",function(){ openAddSheet(); });
+  document.getElementById("trendBtn").addEventListener("click",function(){ openTrendSheet(); });
+  document.getElementById("exportLinkMain").addEventListener("click",function(e){ e.preventDefault(); exportItems(); });
+  document.getElementById("importLinkMain").addEventListener("click",function(e){ e.preventDefault(); document.getElementById("importFileMain").click(); });
+  document.getElementById("importFileMain").addEventListener("change",function(e){
+    var f=e.target.files&&e.target.files[0]; e.target.value="";
+    if(!f) return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{ var data=JSON.parse(rd.result); var n=importItems(data); toast(n.added+"件を取り込みました"+(n.skipped?"（重複"+n.skipped+"件はスキップ）":"")); render(); }
+      catch(err){ toast("読み込めませんでした（JSON形式をご確認ください）"); }
+    };
+    rd.onerror=function(){ toast("ファイルを読み込めませんでした"); };
+    rd.readAsText(f);
+  });
+
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml };
+
+  load();
+  render();
+})();
+</script>
+</body>
+</html>
