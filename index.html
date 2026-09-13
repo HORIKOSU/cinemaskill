@@ -318,6 +318,66 @@
 
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
 
+  /* ---------- romaji -> katakana (best-effort, mechanical conversion) ---------- */
+  // Used for cast/character names that TMDB returns only in the Latin alphabet
+  // (common for anime characters and some person entries even with language=ja-JP).
+  // This is a rule-based Hepburn-style romaji reader, NOT a name dictionary:
+  // it converts spelling to kana syllable-by-syllable, so it reads Japanese names
+  // (already romanized) quite reliably, but Western names may come out as an
+  // approximate phonetic guess rather than the conventional katakana spelling.
+  var ROMAJI_3 = {
+    kya:"キャ",kyu:"キュ",kyo:"キョ", sha:"シャ",shu:"シュ",sho:"ショ",
+    cha:"チャ",chu:"チュ",cho:"チョ", nya:"ニャ",nyu:"ニュ",nyo:"ニョ",
+    hya:"ヒャ",hyu:"ヒュ",hyo:"ヒョ", mya:"ミャ",myu:"ミュ",myo:"ミョ",
+    rya:"リャ",ryu:"リュ",ryo:"リョ", gya:"ギャ",gyu:"ギュ",gyo:"ギョ",
+    jya:"ジャ",jyu:"ジュ",jyo:"ジョ", bya:"ビャ",byu:"ビュ",byo:"ビョ",
+    pya:"ピャ",pyu:"ピュ",pyo:"ピョ", dya:"ヂャ",dyu:"ヂュ",dyo:"ヂョ",
+    shi:"シ", chi:"チ", tsu:"ツ"
+  };
+  var ROMAJI_2 = {
+    ka:"カ",ki:"キ",ku:"ク",ke:"ケ",ko:"コ", sa:"サ",su:"ス",se:"セ",so:"ソ",
+    ta:"タ",te:"テ",to:"ト", na:"ナ",ni:"ニ",nu:"ヌ",ne:"ネ",no:"ノ",
+    ha:"ハ",hi:"ヒ",fu:"フ",he:"ヘ",ho:"ホ", ma:"マ",mi:"ミ",mu:"ム",me:"メ",mo:"モ",
+    ya:"ヤ",yu:"ユ",yo:"ヨ", ra:"ラ",ri:"リ",ru:"ル",re:"レ",ro:"ロ",
+    wa:"ワ",wo:"ヲ", ga:"ガ",gi:"ギ",gu:"グ",ge:"ゲ",go:"ゴ",
+    za:"ザ",ji:"ジ",zu:"ズ",ze:"ゼ",zo:"ゾ", da:"ダ",de:"デ",do:"ド",
+    ba:"バ",bi:"ビ",bu:"ブ",be:"ベ",bo:"ボ", pa:"パ",pi:"ピ",pu:"プ",pe:"ペ",po:"ポ",
+    va:"ヴァ",vi:"ヴィ",vu:"ヴ",ve:"ヴェ",vo:"ヴォ",
+    fa:"ファ",fi:"フィ",fe:"フェ",fo:"フォ", ti:"ティ",di:"ディ", tu:"トゥ",du:"ドゥ",
+    // English-style "c" isn't used in standard Hepburn romaji, but shows up in some
+    // official English spellings (e.g. "Conan"); read it like the nearest k/s sound.
+    ca:"カ",co:"コ",cu:"ク",ce:"セ",ci:"シ"
+  };
+  var ROMAJI_1 = { a:"ア", i:"イ", u:"ウ", e:"エ", o:"オ" };
+  var SOKUON_CONSONANTS = "kstpgzbdcf";
+  function romajiToKatakana(str){
+    var s=String(str||"").toLowerCase();
+    var out="", i=0, n=s.length;
+    while(i<n){
+      var c=s[i];
+      if(c===" "||c==="-"){ out+="・"; i++; continue; }
+      if(!/[a-z]/.test(c)){ i++; continue; } // skip punctuation like . ' ,
+      if(c==="n" && (i+1>=n || !/[aeiouy]/.test(s[i+1]))){ out+="ン"; i++; continue; }
+      if(i+1<n && c===s[i+1] && SOKUON_CONSONANTS.indexOf(c)>=0){ out+="ッ"; i++; continue; }
+      var three=s.substr(i,3);
+      if(ROMAJI_3[three]){ out+=ROMAJI_3[three]; i+=3; continue; }
+      var two=s.substr(i,2);
+      if(ROMAJI_2[two]){ out+=ROMAJI_2[two]; i+=2; continue; }
+      if(ROMAJI_1[c]){ out+=ROMAJI_1[c]; i++; continue; }
+      i++; // unrecognized consonant cluster: skip rather than mangle
+    }
+    return out;
+  }
+  function isAlphabetName(str){ return /^[A-Za-z][A-Za-z\s.'\-]*$/.test(String(str||"").trim()); }
+  // Best-effort display name: converts pure-alphabet names to katakana, leaves
+  // anything already containing Japanese (or mixed/empty) text untouched.
+  function displayName(str){
+    var s=String(str||"");
+    if(!s || !isAlphabetName(s)) return s;
+    var kana=romajiToKatakana(s);
+    return kana || s;
+  }
+
   function genreDict(mediaType){ return mediaType==="movie" ? MOVIE_GENRES : TV_GENRES; }
   function genreNamesOf(item, opts){
     var dict=genreDict(item.mediaType);
@@ -624,12 +684,12 @@
   function creditsBodyHtml(credits){
     if(!credits) return "";
     var h="";
-    if(credits.director){ h+='<div class="cast-director">監督: <b>'+esc(credits.director)+'</b></div>'; }
+    if(credits.director){ h+='<div class="cast-director">監督: <b>'+esc(displayName(credits.director))+'</b></div>'; }
     if(credits.cast && credits.cast.length){
       h+='<div class="cast-list">'+credits.cast.map(function(c){
         var pidAttr = c.personId ? ' data-person-id="'+c.personId+'" data-person-name="'+esc(c.name)+'"' : '';
-        var primary = c.character ? esc(c.character) : esc(c.name);
-        var secondary = c.character ? esc(c.name) : "";
+        var primary = c.character ? esc(displayName(c.character)) : esc(displayName(c.name));
+        var secondary = c.character ? esc(displayName(c.name)) : "";
         return '<div class="cast-item"'+pidAttr+'>'+castPhotoHtml(c)+'<div class="cast-item-text"><div class="cast-char-name">'+primary+'</div>'+(secondary?'<div class="cast-actor-name">'+secondary+'</div>':'')+'</div></div>';
       }).join("")+'</div>';
     } else if(!credits.director){
@@ -688,7 +748,7 @@
     });
   }
   function openPersonSheet(personId, personName){
-    var h='<div class="grip"></div><h2>'+esc(personName)+'の出演作</h2><div id="personResults"><div class="searching"><span class="spinner"></span> 取得中…</div></div><button class="btn ghost" id="personCloseBtn">閉じる</button>';
+    var h='<div class="grip"></div><h2>'+esc(displayName(personName))+'の出演作</h2><div id="personResults"><div class="searching"><span class="spinner"></span> 取得中…</div></div><button class="btn ghost" id="personCloseBtn">閉じる</button>';
     openSheet(h);
     document.getElementById("personCloseBtn").onclick=closeSheet;
     fetchPersonCredits(personId).then(function(list){
@@ -1098,7 +1158,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName };
 
   load();
   render();
