@@ -389,6 +389,32 @@
     return kana || s;
   }
 
+  /* ---------- reading-based search matching ---------- */
+  // Lets the list-view filter hit regardless of script: romaji query vs a
+  // katakana/hiragana title, or katakana vs hiragana spelling differences.
+  function katakanaToHiragana(str){
+    return String(str||"").replace(/[ァ-ヶ]/g,function(ch){
+      return String.fromCharCode(ch.charCodeAt(0)-0x60);
+    });
+  }
+  // Best-effort "reading" key for matching: alphabet text is read as romaji and
+  // converted through katakana to hiragana; kana text is folded to hiragana;
+  // kanji has no derivable reading here, so it only matches literal substrings.
+  function searchReadingKey(str){
+    var s=String(str||"").trim();
+    if(!s) return "";
+    if(isAlphabetName(s)) return katakanaToHiragana(romajiToKatakana(s)).toLowerCase();
+    return katakanaToHiragana(s).toLowerCase();
+  }
+  function titleMatchesQuery(title, query){
+    var t=String(title||""), q=String(query||"");
+    if(!q) return true;
+    if(t.toLowerCase().indexOf(q.toLowerCase())>=0) return true; // exact/substring match (existing behavior)
+    var qKey=searchReadingKey(q);
+    if(!qKey) return false;
+    return searchReadingKey(t).indexOf(qKey)>=0;
+  }
+
   function genreDict(mediaType){ return mediaType==="movie" ? MOVIE_GENRES : TV_GENRES; }
   function genreNamesOf(item, opts){
     var dict=genreDict(item.mediaType);
@@ -524,8 +550,8 @@
     else if(state.typeFilter==="movie"){ list=list.filter(function(it){ return it.mediaType==="movie" && !isAnimeItem(it); }); }
     else if(state.typeFilter==="tv"){ list=list.filter(function(it){ return it.mediaType==="tv" && !isAnimeItem(it); }); }
     if(state.q){
-      var q=state.q.toLowerCase();
-      list=list.filter(function(it){ return (it.title||"").toLowerCase().indexOf(q)>=0; });
+      var q=state.q;
+      list=list.filter(function(it){ return titleMatchesQuery(it.title, q); });
     }
     list=list.slice().sort(function(a,b){
       if(state.tab==="want"){
@@ -1269,7 +1295,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems };
 
   load();
   render();
