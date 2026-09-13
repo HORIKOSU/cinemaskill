@@ -350,8 +350,19 @@
   };
   var ROMAJI_1 = { a:"ア", i:"イ", u:"ウ", e:"エ", o:"オ" };
   var SOKUON_CONSONANTS = "kstpgzbdcf";
+  // TMDB's official-romanization names commonly use macron (ō, ū, …) or circumflex
+  // (ô, û, …) long-vowel marks — e.g. "Shōyō", "Rintarō". Expand these to plain
+  // ASCII digraphs first so both the alphabet-detector and the tokenizer see them.
+  function expandLongVowelMarks(str){
+    return String(str||"")
+      .replace(/[ÂÄĀ]/g,"Aa").replace(/[âäā]/g,"aa")
+      .replace(/[ÎÏĪ]/g,"Ii").replace(/[îïī]/g,"ii")
+      .replace(/[ÛÜŪ]/g,"Uu").replace(/[ûüū]/g,"uu")
+      .replace(/[ÊËĒ]/g,"Ee").replace(/[êëē]/g,"ee")
+      .replace(/[ÔÖŌ]/g,"Ou").replace(/[ôöō]/g,"ou");
+  }
   function romajiToKatakana(str){
-    var s=String(str||"").toLowerCase();
+    var s=expandLongVowelMarks(str).toLowerCase();
     var out="", i=0, n=s.length;
     while(i<n){
       var c=s[i];
@@ -368,7 +379,7 @@
     }
     return out;
   }
-  function isAlphabetName(str){ return /^[A-Za-z][A-Za-z\s.'\-]*$/.test(String(str||"").trim()); }
+  function isAlphabetName(str){ return /^[A-Za-z][A-Za-z\s.'\-]*$/.test(expandLongVowelMarks(str).trim()); }
   // Best-effort display name: converts pure-alphabet names to katakana, leaves
   // anything already containing Japanese (or mixed/empty) text untouched.
   function displayName(str){
@@ -660,6 +671,7 @@
   }
 
   /* ---------- TMDB credits (cast/director) ---------- */
+  var CAST_DISPLAY_MAX=20; // top N cast members shown in the detail sheet (TMDB returns them billing-order)
   function fetchCredits(item){
     var key=tmdbKey();
     if(!key || !item.tmdbId) return Promise.reject({code:"NO_KEY"});
@@ -668,7 +680,7 @@
       if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
       return r.json();
     }).then(function(data){
-      var cast=(data.cast||[]).slice(0,10).map(function(c){
+      var cast=(data.cast||[]).slice(0,CAST_DISPLAY_MAX).map(function(c){
         return { name:c.name||"", character:c.character||"", profile:c.profile_path||null, personId:c.id||null };
       });
       var directorEntry=(data.crew||[]).filter(function(c){ return c.job==="Director"; })[0];
@@ -1158,7 +1170,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName };
 
   load();
   render();
