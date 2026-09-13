@@ -107,6 +107,9 @@
   .sheet{ width:100%;max-width:560px;background:var(--panel);border-radius:20px 20px 0 0; padding:8px 18px calc(20px + env(safe-area-inset-bottom));animation:up .22s ease;max-height:92vh; overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y; }
   @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:translateY(0);opacity:1}}
   .grip{width:40px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 14px}
+  .sheet-x{position:sticky;top:0;z-index:5;display:flex;justify-content:flex-end;height:0;pointer-events:none}
+  .sheet-x button{pointer-events:auto;width:32px;height:32px;flex:0 0 auto;margin-top:6px;border-radius:50%;border:none;background:rgba(0,0,0,.08);color:var(--muted);font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .sheet-x button:active{background:rgba(0,0,0,.16);transform:scale(.94)}
   .sheet h2{font-size:17px;margin:0 0 12px}
 
   .shelf-choices{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:6px}
@@ -255,7 +258,7 @@
     <button class="chip cur" data-type="all">すべて</button>
     <button class="chip" data-type="movie">🎬 映画</button>
     <button class="chip" data-type="tv">📺 ドラマ</button>
-    <button class="chip" data-type="anime">🌸 アニメ</button>
+    <button class="chip" data-type="anime">🎨 アニメ</button>
   </div>
   <div class="toolbar">
     <div class="search">
@@ -364,7 +367,7 @@
       +'<div class="hero-label">観た作品</div>'
       +'<div class="hero-split">'
       +  '<div class="hero-split-bar">'+typeSplitBarHtml(t,total)+'</div>'
-      +  '<div class="hero-split-label">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🌸 アニメ '+t.anime+'</div>'
+      +  '<div class="hero-split-label">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🎨 アニメ '+t.anime+'</div>'
       +'</div>'
       +'<div class="hero-sub-row"><span class="hero-chip">見たい '+c.want+'</span><span class="hero-chip">観てる '+c.watching+'</span></div>';
     document.getElementById("heroStat").innerHTML=h;
@@ -492,7 +495,17 @@
 
   /* ---------- sheet helpers ---------- */
   var overlay=document.getElementById("overlay"), sheet=document.getElementById("sheet");
-  function openSheet(html){ sheet.innerHTML=html; overlay.classList.add("on"); try{sheet.scrollTop=0;}catch(e){} document.body.classList.add("sheet-open"); }
+  // Every sheet gets this sticky ✕ regardless of how long its content is (cast/watch-providers/
+  // history can push the per-sheet "閉じる" button far below the fold) — it stays pinned to the
+  // top-right of the scrollable sheet the whole time, so closing never requires scrolling first.
+  function openSheet(html){
+    sheet.innerHTML='<div class="sheet-x"><button id="sheetXBtn" aria-label="閉じる">✕</button></div>'+html;
+    overlay.classList.add("on");
+    try{sheet.scrollTop=0;}catch(e){}
+    document.body.classList.add("sheet-open");
+    var xBtn=document.getElementById("sheetXBtn");
+    if(xBtn) xBtn.onclick=closeSheet;
+  }
   function closeSheet(){ overlay.classList.remove("on"); sheet.innerHTML=""; document.body.classList.remove("sheet-open"); }
   overlay.addEventListener("click",function(e){ if(e.target===overlay) closeSheet(); });
 
@@ -779,7 +792,7 @@
       + '<div class="field"><label>種別</label><div class="shelf-choices" id="mType">'
       +   '<button class="type-btn cur" data-type="movie">🎬 映画</button>'
       +   '<button class="type-btn" data-type="tv">📺 ドラマ</button>'
-      +   '<button class="type-btn" data-type="anime">🌸 アニメ</button>'
+      +   '<button class="type-btn" data-type="anime">🎨 アニメ</button>'
       + '</div></div>'
       + '<div class="field"><label>メモ（任意）</label><input id="mMemo" placeholder="気になる理由・進捗など"></div>'
       + '<h2 style="font-size:14px;margin-top:16px">棚を選ぶ</h2>'
@@ -988,7 +1001,7 @@
       + '</div>'
       + '<div class="hero-split" style="margin-bottom:18px">'
       +   '<div class="hero-split-bar" style="background:var(--accent-soft)">'+typeSplitBarHtml(t,total,"var(--accent-soft)")+'</div>'
-      +   '<div class="hero-split-label" style="color:var(--muted)">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🌸 アニメ '+t.anime+'（登録全体）</div>'
+      +   '<div class="hero-split-label" style="color:var(--muted)">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🎨 アニメ '+t.anime+'（登録全体）</div>'
       + '</div>';
     var curYear=new Date().getFullYear();
     h+='<h2 style="font-size:14px">月別の視聴数（観た作品）</h2><div id="moSection">'+monthlyGraphHtml(curYear)+'</div>';
