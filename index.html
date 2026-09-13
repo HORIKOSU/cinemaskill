@@ -956,6 +956,11 @@
       title:cand.title||"（無題）", year:cand.year||"", overview:cand.overview||"",
       posterPath:cand.posterPath||null, genreIds:cand.genreIds||[],
       manual: !cand.tmdbId,
+      // showTitle/showPosterPath/showOverview keep the series-level (non-season) info
+      // so a TV item can later be switched between "whole series" and a specific
+      // season without losing the data needed to rebuild the other mode.
+      showTitle:cand.title||"（無題）", showPosterPath:cand.posterPath||null, showOverview:cand.overview||"",
+      seasonNumber:null, seasonName:null,
       status:status, priority:0, rating:0, memo:"",
       watchedAt: status==="done" ? todayStr() : null,
       addedAt: nowIso(), updatedAt: nowIso(), history:[], wp:null, credits:null
@@ -970,13 +975,86 @@
       title:(cand.title||"（無題）")+" "+seasonInfo.name,
       year:seasonInfo.airYear||cand.year||"", overview:seasonInfo.overview||cand.overview||"",
       posterPath:seasonInfo.posterPath||cand.posterPath||null, genreIds:cand.genreIds||[],
-      manual:false, seasonNumber:seasonInfo.seasonNumber, seasonName:seasonInfo.name,
+      manual:false,
+      showTitle:cand.title||"（無題）", showPosterPath:cand.posterPath||null, showOverview:cand.overview||"",
+      seasonNumber:seasonInfo.seasonNumber, seasonName:seasonInfo.name,
       status:status, priority:0, rating:0, memo:"",
       watchedAt: status==="done" ? todayStr() : null,
       addedAt: nowIso(), updatedAt: nowIso(), history:[], wp:null, credits:null
     };
     pushHistory(item, status);
     return item;
+  }
+
+  // Best-effort recovery of series-level info for items created before showTitle
+  // existed. Strips a trailing " <seasonName>" from the title if present.
+  function showInfoOf(item){
+    if(item.showTitle) return { title:item.showTitle, posterPath:item.showPosterPath||null, overview:item.showOverview||"" };
+    var title=item.title||"";
+    if(item.seasonName && title.slice(-item.seasonName.length)===item.seasonName){
+      title=title.slice(0, title.length-item.seasonName.length).trim();
+    }
+    return { title:title||item.title||"", posterPath:item.seasonNumber!=null?null:(item.posterPath||null), overview:item.seasonNumber!=null?"":(item.overview||"") };
+  }
+
+  function openSeasonEditSheet(item){
+    var show=showInfoOf(item);
+    var h='<div class="grip"></div><h2>'+esc(show.title)+'：登録形式を変更</h2>'
+      + '<div id="seasonEditList"><div class="searching"><span class="spinner"></span> シーズン情報を取得中…</div></div>'
+      + '<button class="btn ghost" id="seasonEditBackBtn">← 詳細に戻る</button>';
+    openSheet(h);
+    document.getElementById("seasonEditBackBtn").onclick=function(){ openDetail(item.id); };
+    fetchTvSeasons(item.tmdbId).then(function(seasons){
+      var box=document.getElementById("seasonEditList");
+      if(!box) return;
+      var wholeCur = item.seasonNumber==null;
+      var rows='<div class="res" data-mode="whole"><div class="rescover ph" style="width:46px;height:46px;font-size:18px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--accent-soft)">🎬</div>'
+        + '<div class="resinfo"><div class="restitle">作品全体'+(wholeCur?'（現在）':'')+'</div>'
+        + '<div class="resmeta">シーズンを分けず1作品として登録</div></div></div>';
+      rows += seasons.map(function(s){
+        var cur = item.seasonNumber===s.seasonNumber;
+        return '<div class="res" data-season="'+s.seasonNumber+'">'
+          + coverHtml({posterPath:s.posterPath||show.posterPath, mediaType:"tv"},"rescover")
+          + '<div class="resinfo"><div class="restitle">'+esc(s.name)+(cur?'（現在）':'')+'</div>'
+          + '<div class="resmeta">'+(s.airYear?esc(s.airYear)+"年 ・ ":"")+(s.episodeCount?"全"+s.episodeCount+"話":"話数不明")+'</div></div>'
+          + '</div>';
+      }).join("");
+      box.innerHTML=rows;
+      var wholeRow=box.querySelector('.res[data-mode="whole"]');
+      if(wholeRow) wholeRow.onclick=function(){ applySeasonChange(item, null); };
+      Array.prototype.forEach.call(box.querySelectorAll(".res[data-season]"),function(el){
+        el.onclick=function(){
+          var sn=+el.dataset.season;
+          var seasonInfo=seasons.filter(function(s){return s.seasonNumber===sn;})[0];
+          applySeasonChange(item, seasonInfo);
+        };
+      });
+    }).catch(function(err){
+      var box=document.getElementById("seasonEditList");
+      if(!box) return;
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーが必要です。</div>'; return; }
+      box.innerHTML='<div class="keynote">シーズン情報を取得できませんでした。</div>';
+    });
+  }
+
+  function applySeasonChange(item, seasonInfo){
+    var show=showInfoOf(item);
+    item.showTitle=show.title; item.showPosterPath=show.posterPath; item.showOverview=show.overview;
+    if(seasonInfo){
+      item.title=show.title+" "+seasonInfo.name;
+      item.seasonNumber=seasonInfo.seasonNumber; item.seasonName=seasonInfo.name;
+      item.posterPath=seasonInfo.posterPath||show.posterPath||null;
+      item.overview=seasonInfo.overview||show.overview||"";
+    } else {
+      item.title=show.title;
+      item.seasonNumber=null; item.seasonName=null;
+      item.posterPath=show.posterPath||null;
+      item.overview=show.overview||"";
+    }
+    item.updatedAt=nowIso();
+    save(); render(); closeSheet();
+    toast("登録形式を更新しました");
+    openDetail(item.id);
   }
 
   function shelfChoicesHtml(curStatus){
@@ -1066,8 +1144,12 @@
       + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(item.year?esc(item.year)+"年":"")
       + (genres.length?(' ・ '+esc(genres.join("／"))):'')+'</div>'
       + (item.overview? '<div class="m">'+esc(item.overview)+'</div>' : '')
-      + '</div></div>'
-      + '<h2 style="font-size:14px;margin-top:2px">棚を選ぶ</h2>'
+      + '</div></div>';
+    if(item.mediaType==="tv" && item.tmdbId){
+      var modeLabel = item.seasonNumber!=null ? esc(item.seasonName||("シーズン"+item.seasonNumber)) : "作品全体";
+      h+='<div class="ddr"><span class="ddr-label">登録形式</span><span class="ddr-val">'+modeLabel+'</span><button class="ddr-edit" id="seasonEditBtn">変更</button></div>';
+    }
+    h+='<h2 style="font-size:14px;margin-top:2px">棚を選ぶ</h2>'
       + shelfChoicesHtml(item.status);
     if(item.status==="want"){
       h+='<div class="detail-star-wrap"><span class="dp-label">優先度</span><div class="detail-stars" id="priStars">'+starsHtml(item.priority||0,false)+'</div></div>';
@@ -1087,6 +1169,8 @@
     h+='<button class="btn danger" id="delBtn">この作品を削除</button>';
     h+='<button class="btn ghost" id="closeDetailBtn">閉じる</button>';
     openSheet(h);
+    var seasonEditBtn=document.getElementById("seasonEditBtn");
+    if(seasonEditBtn) seasonEditBtn.onclick=function(){ openSeasonEditSheet(item); };
     if(item.tmdbId){
       renderCastSection(item);
       var castRefreshBtn=document.getElementById("castRefreshBtn");
@@ -1295,7 +1379,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange };
 
   load();
   render();
