@@ -208,6 +208,21 @@
   .wp-attr{font-size:10px;color:var(--muted);margin-top:8px}
   .wp-attr a{color:var(--muted)}
 
+  /* cast / credits */
+  .cast-wrap{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .cast-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cast-title{font-size:12.5px;font-weight:800;color:var(--muted)}
+  .cast-refresh{border:none;background:none;color:var(--accent-dk);font-family:inherit;font-weight:700;font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0}
+  .cast-director{font-size:12.5px;color:var(--ink);margin-bottom:10px}
+  .cast-director b{color:var(--accent-dk)}
+  .cast-row{display:flex;gap:11px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .cast-card{flex:0 0 auto;width:64px;text-align:center}
+  .cast-photo{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--accent-soft);box-shadow:0 2px 6px rgba(0,0,0,.12)}
+  .cast-photo.ph{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent-dk);opacity:.5}
+  .cast-name{font-size:10.5px;font-weight:700;color:var(--ink);margin-top:5px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cast-char{font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .cast-empty{font-size:12px;color:var(--muted)}
+
   .data-footer{text-align:center;font-size:11.5px;color:var(--muted);margin:22px 0 10px;padding-top:14px;border-top:1px solid var(--line);line-height:1.8}
   .data-footer a{color:var(--muted);text-decoration:underline;cursor:pointer}
 
@@ -542,6 +557,58 @@
     });
   }
 
+  /* ---------- TMDB credits (cast/director) ---------- */
+  function fetchCredits(item){
+    var key=tmdbKey();
+    if(!key || !item.tmdbId) return Promise.reject({code:"NO_KEY"});
+    var url="https://api.themoviedb.org/3/"+item.mediaType+"/"+item.tmdbId+"/credits?api_key="+encodeURIComponent(key)+"&language=ja-JP";
+    return fetch(url).then(function(r){
+      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
+      return r.json();
+    }).then(function(data){
+      var cast=(data.cast||[]).slice(0,10).map(function(c){
+        return { name:c.name||"", character:c.character||"", profile:c.profile_path||null };
+      });
+      var directorEntry=(data.crew||[]).filter(function(c){ return c.job==="Director"; })[0];
+      return { at: nowIso(), cast:cast, director: directorEntry ? directorEntry.name : null };
+    });
+  }
+  function castPhotoHtml(c){
+    if(c.profile){
+      return '<img class="cast-photo" src="https://image.tmdb.org/t/p/w185'+c.profile+'" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb-icon="🧑" data-fb-cls="cast-photo" onerror="window.__cmImgFallback(this)">';
+    }
+    return '<div class="cast-photo ph">🧑</div>';
+  }
+  function creditsBodyHtml(credits){
+    if(!credits) return "";
+    var h="";
+    if(credits.director){ h+='<div class="cast-director">監督: <b>'+esc(credits.director)+'</b></div>'; }
+    if(credits.cast && credits.cast.length){
+      h+='<div class="cast-row">'+credits.cast.map(function(c){
+        return '<div class="cast-card">'+castPhotoHtml(c)+'<div class="cast-name">'+esc(c.name)+'</div>'+(c.character?'<div class="cast-char">'+esc(c.character)+'</div>':'')+'</div>';
+      }).join("")+'</div>';
+    } else if(!credits.director){
+      h+='<div class="cast-empty">キャスト情報が見つかりませんでした</div>';
+    }
+    return h;
+  }
+  function renderCastSection(item){
+    var box=document.getElementById("castBody");
+    if(!box) return;
+    if(item.credits && (Date.now()-new Date(item.credits.at).getTime())<WP_MAX_AGE_MS){
+      box.innerHTML=creditsBodyHtml(item.credits);
+      return;
+    }
+    box.innerHTML='<div class="searching"><span class="spinner"></span> キャスト情報を確認中…</div>';
+    fetchCredits(item).then(function(credits){
+      item.credits=credits; save();
+      box.innerHTML=creditsBodyHtml(credits);
+    }).catch(function(err){
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="cast-empty">TMDB APIキーを設定するとキャスト情報を確認できます</div>'; return; }
+      box.innerHTML='<div class="cast-empty">キャスト情報を取得できませんでした</div>';
+    });
+  }
+
   /* ---------- add sheet ---------- */
   function openAddSheet(){
     var key=tmdbKey();
@@ -617,7 +684,7 @@
       manual: !cand.tmdbId,
       status:status, priority:0, rating:0, memo:"",
       watchedAt: status==="done" ? todayStr() : null,
-      addedAt: nowIso(), updatedAt: nowIso(), history:[], wp:null
+      addedAt: nowIso(), updatedAt: nowIso(), history:[], wp:null, credits:null
     };
     pushHistory(item, status);
     return item;
@@ -719,6 +786,7 @@
     var memoLabel = item.status==="done" ? "感想・レビュー" : item.status==="watching" ? "メモ（何話まで観たか等）" : "メモ（気になる理由など）";
     h+='<div class="field"><label>'+memoLabel+'</label><textarea id="memoInput" placeholder="自由にメモできます">'+esc(item.memo||"")+'</textarea></div>';
     if(item.tmdbId){
+      h+='<div class="cast-wrap"><div class="cast-head"><span class="cast-title">🎭 キャスト</span><button class="cast-refresh" id="castRefreshBtn">更新</button></div><div id="castBody"></div></div>';
       h+='<div class="wp-wrap"><div class="wp-head"><span class="wp-title">📺 配信状況（日本）</span><button class="wp-refresh" id="wpRefreshBtn">更新</button></div><div id="wpBody"></div></div>';
     }
     h+=historyHtml(item);
@@ -726,6 +794,9 @@
     h+='<button class="btn ghost" id="closeDetailBtn">閉じる</button>';
     openSheet(h);
     if(item.tmdbId){
+      renderCastSection(item);
+      var castRefreshBtn=document.getElementById("castRefreshBtn");
+      if(castRefreshBtn) castRefreshBtn.onclick=function(){ item.credits=null; renderCastSection(item); };
       renderWpSection(item);
       var wpRefreshBtn=document.getElementById("wpRefreshBtn");
       if(wpRefreshBtn) wpRefreshBtn.onclick=function(){ item.wp=null; renderWpSection(item); };
@@ -934,7 +1005,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits };
 
   load();
   render();
