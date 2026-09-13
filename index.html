@@ -216,7 +216,8 @@
   .cast-director{font-size:12.5px;color:var(--ink);margin-bottom:10px}
   .cast-director b{color:var(--accent-dk)}
   .cast-row{display:flex;gap:11px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
-  .cast-card{flex:0 0 auto;width:64px;text-align:center}
+  .cast-card{flex:0 0 auto;width:64px;text-align:center;cursor:pointer}
+  .cast-card:active{transform:scale(.94)}
   .cast-photo{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--accent-soft);box-shadow:0 2px 6px rgba(0,0,0,.12)}
   .cast-photo.ph{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent-dk);opacity:.5}
   .cast-name{font-size:10.5px;font-weight:700;color:var(--ink);margin-top:5px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -254,6 +255,7 @@
     <button class="chip cur" data-type="all">すべて</button>
     <button class="chip" data-type="movie">🎬 映画</button>
     <button class="chip" data-type="tv">📺 ドラマ</button>
+    <button class="chip" data-type="anime">🌸 アニメ</button>
   </div>
   <div class="toolbar">
     <div class="search">
@@ -316,6 +318,12 @@
     var dict=genreDict(item.mediaType);
     return (item.genreIds||[]).map(function(id){return dict[id];}).filter(Boolean);
   }
+  var ANIME_GENRE_ID=16; // "アニメーション" — same id in both TMDB movie & tv genre lists
+  function isAnimeItem(item){ return (item.genreIds||[]).indexOf(ANIME_GENRE_ID)>=0; }
+  function typeLabelOf(item){
+    if(item.mediaType==="tv") return isAnimeItem(item) ? "アニメ" : "ドラマ";
+    return isAnimeItem(item) ? "アニメ映画" : "映画";
+  }
 
   /* ---------- history ---------- */
   function pushHistory(item, status){
@@ -330,24 +338,33 @@
     return c;
   }
   function countsByType(){
-    var c={movie:0,tv:0};
-    state.items.forEach(function(it){ if(c[it.mediaType]!==undefined) c[it.mediaType]++; });
+    // mutually exclusive: anime (movie or tv with the Animation genre) is split out
+    // from plain movie/tv so the ratio bar and filter chips agree with each other.
+    var c={movie:0,tv:0,anime:0};
+    state.items.forEach(function(it){
+      if(isAnimeItem(it)) c.anime++;
+      else if(it.mediaType==="movie") c.movie++;
+      else if(it.mediaType==="tv") c.tv++;
+    });
     return c;
   }
 
   /* ---------- rendering: hero ---------- */
+  function typeSplitBarHtml(t, total, trackBg){
+    if(!total) return '<div class="seg" style="width:100%;background:'+(trackBg||"rgba(255,255,255,.12)")+'"></div>';
+    var movieW=Math.round(t.movie/total*1000)/10, tvW=Math.round(t.tv/total*1000)/10, animeW=Math.max(0,100-movieW-tvW);
+    return '<div class="seg" style="width:'+movieW+'%;background:#7c9fe0"></div>'
+      +'<div class="seg" style="width:'+tvW+'%;background:#e0b26b"></div>'
+      +'<div class="seg" style="width:'+animeW+'%;background:#d98cc9"></div>';
+  }
   function renderHero(){
     var c=countsByStatus(), t=countsByType();
     var total=state.items.length;
-    var movieW = total ? Math.round(t.movie/total*1000)/10 : 0;
-    var tvW = total ? (100-movieW) : 0;
     var h='<div class="hero-num">'+c.done+'<small>作品</small></div>'
       +'<div class="hero-label">観た作品</div>'
       +'<div class="hero-split">'
-      +  '<div class="hero-split-bar">'
-      +    (total? '<div class="seg" style="width:'+movieW+'%;background:#7c9fe0"></div><div class="seg" style="width:'+tvW+'%;background:#e0b26b"></div>' : '<div class="seg" style="width:100%;background:rgba(255,255,255,.12)"></div>')
-      +  '</div>'
-      +  '<div class="hero-split-label">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+'</div>'
+      +  '<div class="hero-split-bar">'+typeSplitBarHtml(t,total)+'</div>'
+      +  '<div class="hero-split-label">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🌸 アニメ '+t.anime+'</div>'
       +'</div>'
       +'<div class="hero-sub-row"><span class="hero-chip">見たい '+c.want+'</span><span class="hero-chip">観てる '+c.watching+'</span></div>';
     document.getElementById("heroStat").innerHTML=h;
@@ -391,7 +408,7 @@
   /* ---------- card ---------- */
   function cardHtml(item){
     var badgeColor = item.status==="want"?"var(--want)":item.status==="watching"?"var(--watching)":"var(--done)";
-    var typeLabel = item.mediaType==="tv" ? "ドラマ" : "映画";
+    var typeLabel = typeLabelOf(item);
     var starsRow="";
     if(item.status==="want"){
       starsRow='<div class="priority-row" data-role="priority">'+starsHtml(item.priority||0,false)+'</div>';
@@ -419,7 +436,9 @@
   /* ---------- list / filter / sort ---------- */
   function visibleItems(){
     var list=state.items.filter(function(it){ return it.status===state.tab; });
-    if(state.typeFilter!=="all"){ list=list.filter(function(it){ return it.mediaType===state.typeFilter; }); }
+    if(state.typeFilter==="anime"){ list=list.filter(isAnimeItem); }
+    else if(state.typeFilter==="movie"){ list=list.filter(function(it){ return it.mediaType==="movie" && !isAnimeItem(it); }); }
+    else if(state.typeFilter==="tv"){ list=list.filter(function(it){ return it.mediaType==="tv" && !isAnimeItem(it); }); }
     if(state.q){
       var q=state.q.toLowerCase();
       list=list.filter(function(it){ return (it.title||"").toLowerCase().indexOf(q)>=0; });
@@ -567,7 +586,7 @@
       return r.json();
     }).then(function(data){
       var cast=(data.cast||[]).slice(0,10).map(function(c){
-        return { name:c.name||"", character:c.character||"", profile:c.profile_path||null };
+        return { name:c.name||"", character:c.character||"", profile:c.profile_path||null, personId:c.id||null };
       });
       var directorEntry=(data.crew||[]).filter(function(c){ return c.job==="Director"; })[0];
       return { at: nowIso(), cast:cast, director: directorEntry ? directorEntry.name : null };
@@ -585,7 +604,8 @@
     if(credits.director){ h+='<div class="cast-director">監督: <b>'+esc(credits.director)+'</b></div>'; }
     if(credits.cast && credits.cast.length){
       h+='<div class="cast-row">'+credits.cast.map(function(c){
-        return '<div class="cast-card">'+castPhotoHtml(c)+'<div class="cast-name">'+esc(c.name)+'</div>'+(c.character?'<div class="cast-char">'+esc(c.character)+'</div>':'')+'</div>';
+        var pidAttr = c.personId ? ' data-person-id="'+c.personId+'" data-person-name="'+esc(c.name)+'"' : '';
+        return '<div class="cast-card"'+pidAttr+'>'+castPhotoHtml(c)+'<div class="cast-name">'+esc(c.name)+'</div>'+(c.character?'<div class="cast-char">'+esc(c.character)+'</div>':'')+'</div>';
       }).join("")+'</div>';
     } else if(!credits.director){
       h+='<div class="cast-empty">キャスト情報が見つかりませんでした</div>';
@@ -595,6 +615,11 @@
   function renderCastSection(item){
     var box=document.getElementById("castBody");
     if(!box) return;
+    box.onclick=function(e){
+      var card=e.target.closest(".cast-card[data-person-id]");
+      if(!card) return;
+      openPersonSheet(card.dataset.personId, card.dataset.personName);
+    };
     if(item.credits && (Date.now()-new Date(item.credits.at).getTime())<WP_MAX_AGE_MS){
       box.innerHTML=creditsBodyHtml(item.credits);
       return;
@@ -606,6 +631,48 @@
     }).catch(function(err){
       if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="cast-empty">TMDB APIキーを設定するとキャスト情報を確認できます</div>'; return; }
       box.innerHTML='<div class="cast-empty">キャスト情報を取得できませんでした</div>';
+    });
+  }
+
+  /* ---------- person filmography (tap a cast member) ---------- */
+  function personCandidateFrom(it){
+    var isMovie = it.media_type==="movie";
+    var dateStr = isMovie ? it.release_date : it.first_air_date;
+    return {
+      tmdbId: it.id, mediaType: isMovie ? "movie":"tv",
+      title: isMovie ? (it.title||it.original_title||"") : (it.name||it.original_name||""),
+      year: (dateStr||"").slice(0,4), overview: it.overview||"",
+      posterPath: it.poster_path||null, genreIds: it.genre_ids||[], _pop: it.popularity||0
+    };
+  }
+  function fetchPersonCredits(personId){
+    var key=tmdbKey();
+    if(!key) return Promise.reject({code:"NO_KEY"});
+    var url="https://api.themoviedb.org/3/person/"+personId+"/combined_credits?api_key="+encodeURIComponent(key)+"&language=ja-JP";
+    return fetch(url).then(function(r){
+      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
+      return r.json();
+    }).then(function(data){
+      var seen={};
+      return (data.cast||[])
+        .filter(function(it){ return it.media_type==="movie"||it.media_type==="tv"; })
+        .map(personCandidateFrom)
+        .filter(function(c){ var k=c.mediaType+":"+c.tmdbId; if(seen[k]) return false; seen[k]=true; return true; })
+        .sort(function(a,b){ return (b._pop||0)-(a._pop||0); })
+        .slice(0,30);
+    });
+  }
+  function openPersonSheet(personId, personName){
+    var h='<div class="grip"></div><h2>'+esc(personName)+'の出演作</h2><div id="personResults"><div class="searching"><span class="spinner"></span> 取得中…</div></div><button class="btn ghost" id="personCloseBtn">閉じる</button>';
+    openSheet(h);
+    document.getElementById("personCloseBtn").onclick=closeSheet;
+    fetchPersonCredits(personId).then(function(list){
+      renderSearchResults(document.getElementById("personResults"), list);
+    }).catch(function(err){
+      var box=document.getElementById("personResults");
+      if(!box) return;
+      if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーを設定すると出演作を確認できます</div>'; return; }
+      box.innerHTML='<div class="keynote">出演作を取得できませんでした</div>';
     });
   }
 
@@ -648,7 +715,7 @@
   function renderSearchResults(box, list){
     if(!list.length){ box.innerHTML='<div class="keynote">見つかりませんでした。別のタイトルで試すか、手動で追加してください。</div>'; return; }
     box.innerHTML = list.map(function(r,idx){
-      var typeLabel=r.mediaType==="tv"?"ドラマ":"映画";
+      var typeLabel=typeLabelOf(r);
       return '<div class="res" data-idx="'+idx+'">'
         + coverHtml(r,"rescover")
         + '<div class="resinfo"><div class="restitle">'+esc(r.title)+'</div>'
@@ -661,7 +728,7 @@
   }
 
   function openPreview(cand){
-    var typeLabel=cand.mediaType==="tv"?"ドラマ":"映画";
+    var typeLabel=typeLabelOf(cand);
     var h='<div class="grip"></div>'
       + '<div class="prev">'+coverHtml(cand)+'<div><div class="t">'+esc(cand.title)+'</div>'
       + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(cand.year?esc(cand.year)+"年":"")+'</div>'
@@ -709,9 +776,10 @@
   function openManualSheet(){
     var h='<div class="grip"></div><h2>手動で追加</h2>'
       + '<div class="field"><label>作品名</label><input id="mTitle" placeholder="作品名を入力"></div>'
-      + '<div class="field"><label>種別</label><div class="shelf-choices two" id="mType">'
+      + '<div class="field"><label>種別</label><div class="shelf-choices" id="mType">'
       +   '<button class="type-btn cur" data-type="movie">🎬 映画</button>'
       +   '<button class="type-btn" data-type="tv">📺 ドラマ</button>'
+      +   '<button class="type-btn" data-type="anime">🌸 アニメ</button>'
       + '</div></div>'
       + '<div class="field"><label>メモ（任意）</label><input id="mMemo" placeholder="気になる理由・進捗など"></div>'
       + '<h2 style="font-size:14px;margin-top:16px">棚を選ぶ</h2>'
@@ -728,7 +796,11 @@
       var title=(document.getElementById("mTitle").value||"").trim();
       if(!title){ toast("作品名を入力してください"); return; }
       var memo=(document.getElementById("mMemo").value||"").trim();
-      var item=makeItem({title:title, mediaType:curType, year:"", overview:"", posterPath:null, genreIds:[]}, status);
+      // "anime" isn't a real TMDB media_type — store it as tv + the Animation genre id
+      // so isAnimeItem()/typeLabelOf() treat it exactly like an anime search result.
+      var mediaType = curType==="anime" ? "tv" : curType;
+      var genreIds = curType==="anime" ? [ANIME_GENRE_ID] : [];
+      var item=makeItem({title:title, mediaType:mediaType, year:"", overview:"", posterPath:null, genreIds:genreIds}, status);
       item.memo=memo;
       state.items.push(item); save(); render(); closeSheet();
       toast(STATUS_LABEL[status]+"に追加しました");
@@ -765,7 +837,7 @@
   function openDetail(id){
     var item=findItem(id);
     if(!item) return;
-    var typeLabel=item.mediaType==="tv"?"ドラマ":"映画";
+    var typeLabel=typeLabelOf(item);
     var genres=genreNamesOf(item);
     var h='<div class="grip"></div>'
       + '<div class="prev">'+coverHtml(item)+'<div><div class="t">'+esc(item.title)+'</div>'
@@ -906,8 +978,6 @@
   function openTrendSheet(){
     var c=countsByStatus(), t=countsByType();
     var total=state.items.length;
-    var movieW = total ? Math.round(t.movie/total*1000)/10 : 0;
-    var tvW = total ? (100-movieW) : 0;
     var stats=computeGenreStats();
     var maxCnt=stats.length?stats[0].count:1;
     var h='<div class="grip"></div><h2>📊 視聴の傾向</h2>'
@@ -917,10 +987,8 @@
       +   '<div><span class="sk-big">'+c.done+'</span><span class="sk-cap">観た</span></div>'
       + '</div>'
       + '<div class="hero-split" style="margin-bottom:18px">'
-      +   '<div class="hero-split-bar" style="background:var(--accent-soft)">'
-      +     (total? '<div class="seg" style="width:'+movieW+'%;background:#7c9fe0"></div><div class="seg" style="width:'+tvW+'%;background:#e0b26b"></div>' : '')
-      +   '</div>'
-      +   '<div class="hero-split-label" style="color:var(--muted)">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+'（登録全体）</div>'
+      +   '<div class="hero-split-bar" style="background:var(--accent-soft)">'+typeSplitBarHtml(t,total,"var(--accent-soft)")+'</div>'
+      +   '<div class="hero-split-label" style="color:var(--muted)">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🌸 アニメ '+t.anime+'（登録全体）</div>'
       + '</div>';
     var curYear=new Date().getFullYear();
     h+='<h2 style="font-size:14px">月別の視聴数（観た作品）</h2><div id="moSection">'+monthlyGraphHtml(curYear)+'</div>';
@@ -1005,7 +1073,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet };
 
   load();
   render();
