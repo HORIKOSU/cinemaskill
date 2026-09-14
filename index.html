@@ -588,16 +588,13 @@
       var q=state.q;
       list=list.filter(function(it){ return titleMatchesQuery(it.title, q); });
     }
+    // 3タブ共通：作品の公開年（item.year）が新しい順。年が同じ・未設定の場合は
+    // 追加日が新しい順にフォールバックする（2026-09-14変更。従来は棚ごとに
+    // 優先度順／更新日順／観た日順とバラバラだったのを統一）。
     list=list.slice().sort(function(a,b){
-      if(state.tab==="want"){
-        var pd=(b.priority||0)-(a.priority||0); if(pd) return pd;
-        return (b.addedAt||"").localeCompare(a.addedAt||"");
-      }
-      if(state.tab==="done"){
-        var da=(a.watchedAt||a.updatedAt||a.addedAt||""), db=(b.watchedAt||b.updatedAt||b.addedAt||"");
-        return db.localeCompare(da);
-      }
-      return (b.updatedAt||b.addedAt||"").localeCompare(a.updatedAt||a.addedAt||"");
+      var yd=(parseInt(b.year,10)||0)-(parseInt(a.year,10)||0);
+      if(yd) return yd;
+      return (b.addedAt||"").localeCompare(a.addedAt||"");
     });
     return list;
   }
