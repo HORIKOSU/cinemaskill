@@ -382,11 +382,26 @@
   function isAlphabetName(str){ return /^[A-Za-z][A-Za-z\s.'\-]*$/.test(expandLongVowelMarks(str).trim()); }
   // Best-effort display name: converts pure-alphabet names to katakana, leaves
   // anything already containing Japanese (or mixed/empty) text untouched.
+  // TMDB's animation credits commonly wrap the alphabet name in extra notation —
+  // e.g. "Naruto Uzumaki (voice)", or "Character A / Character B" when one actor
+  // plays multiple roles — which used to make the whole string fail the
+  // pure-alphabet check and fall through unconverted. Handle those shapes here
+  // so the underlying name still gets converted.
   function displayName(str){
     var s=String(str||"");
-    if(!s || !isAlphabetName(s)) return s;
-    var kana=romajiToKatakana(s);
-    return kana || s;
+    if(!s) return s;
+    if(s.indexOf(" / ")>=0) return s.split(" / ").map(displayNameSegment).join("／");
+    return displayNameSegment(s);
+  }
+  function displayNameSegment(str){
+    var s=String(str||"").trim();
+    if(!s) return s;
+    var m=s.match(/^(.*?)\s*(\([^)]+\))\s*$/); // trailing "(voice)" / "(uncredited)" etc.
+    var core=m?m[1].trim():s;
+    var note=m?m[2]:"";
+    if(!core || !isAlphabetName(core)) return s;
+    var kana=romajiToKatakana(core);
+    return kana ? (kana+note) : s;
   }
 
   /* ---------- reading-based search matching ---------- */
