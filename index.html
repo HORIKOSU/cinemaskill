@@ -102,6 +102,15 @@
   .fab{ position:fixed;left:50%;transform:translateX(-50%); bottom:calc(20px + env(safe-area-inset-bottom));z-index:30; display:flex;align-items:center;gap:9px; background:var(--accent);color:#fff;border:none;cursor:pointer; padding:15px 26px;border-radius:999px;font-size:16px;font-weight:800;font-family:inherit; box-shadow:0 8px 24px rgba(28,36,64,.42); }
   .fab:active{background:var(--accent-dk)}
   .fab svg{width:20px;height:20px}
+  /* タップ時のエラスティック・スクワッシュ演出：横に伸びて縦が縮み、弾んで戻る */
+  .fab.squash{ animation:fabSquash .55s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes fabSquash{
+    0%{ transform:translateX(-50%) scale(1,1) }
+    28%{ transform:translateX(-50%) scale(1.09,.90) }
+    52%{ transform:translateX(-50%) scale(.93,1.07) }
+    74%{ transform:translateX(-50%) scale(1.03,.98) }
+    100%{ transform:translateX(-50%) scale(1,1) }
+  }
 
   .overlay{ position:fixed;inset:0;z-index:50;background:rgba(14,16,28,.55); display:none;align-items:flex-end;justify-content:center; }
   .overlay.on{display:flex}
@@ -157,6 +166,17 @@
   .resinfo{min-width:0;flex:1}
   .restitle{font-size:14px;font-weight:800;line-height:1.35;margin-bottom:3px; display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .resmeta{font-size:12px;color:var(--muted);line-height:1.45;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+
+  /* シーズン複数選択（チェック式一括登録） */
+  .res.season-pick{align-items:center}
+  .res-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);flex:0 0 auto;margin-left:auto;
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;
+    transition:background .12s ease,border-color .12s ease;background:#fff}
+  .res.season-pick.sel{border-color:var(--accent);background:var(--accent-soft)}
+  .res.season-pick.sel .res-check{background:var(--accent);border-color:var(--accent)}
+  .season-actionbar{position:sticky;bottom:0;background:var(--panel);padding:10px 0 8px;margin-top:2px}
+  .season-actionbar .btn{width:100%}
+  .season-actionbar .btn:disabled{opacity:.45;cursor:not-allowed}
 
   .prev{display:flex;gap:14px;align-items:flex-start;margin:6px 0 16px}
   .prev .cover{width:74px;height:111px;flex:0 0 auto}
@@ -918,31 +938,75 @@
     document.getElementById("addModeSeason").onclick=function(){ openSeasonList(cand); };
   }
 
+  // シーズン一覧はチェック式：観たい／記録したいシーズンを複数選んでから
+  // まとめて1つの棚に追加する（1件だけチェックすればこれまで通り単体登録になる）。
   function openSeasonList(cand){
+    var selected={}; // seasonNumber -> seasonInfo
     var h='<div class="grip"></div><h2>'+esc(cand.title)+'：シーズンを選ぶ</h2>'
+      + '<div class="keynote">記録したいシーズンに✓を付けてください。複数選ぶと、まとめて同じ棚に追加できます。</div>'
       + '<div id="seasonList"><div class="searching"><span class="spinner"></span> シーズン情報を取得中…</div></div>'
+      + '<div class="season-actionbar"><button class="btn primary" id="seasonAddBtn" disabled>シーズンを選んでください</button></div>'
       + '<button class="btn ghost" id="seasonBackBtn">← 戻る</button>';
     openSheet(h);
     document.getElementById("seasonBackBtn").onclick=function(){ openAddModeChoice(cand); };
+    var addBtn=document.getElementById("seasonAddBtn");
+    function updateAddBtn(){
+      var list=Object.keys(selected).map(function(k){ return selected[k]; });
+      if(list.length){ addBtn.disabled=false; addBtn.textContent="選んだシーズンを追加する（"+list.length+"件）"; }
+      else { addBtn.disabled=true; addBtn.textContent="シーズンを選んでください"; }
+    }
+    addBtn.onclick=function(){
+      var list=Object.keys(selected).map(function(k){ return selected[k]; })
+        .sort(function(a,b){ return a.seasonNumber-b.seasonNumber; });
+      if(!list.length) return;
+      openSeasonBatchShelfPick(cand, list);
+    };
     fetchTvSeasons(cand.tmdbId).then(function(seasons){
       var box=document.getElementById("seasonList");
       if(!box) return;
       if(!seasons.length){ box.innerHTML='<div class="keynote">シーズン情報が見つかりませんでした。</div>'; return; }
       box.innerHTML = seasons.map(function(s,idx){
-        return '<div class="res" data-idx="'+idx+'">'
+        return '<div class="res season-pick" data-idx="'+idx+'">'
           + coverHtml({posterPath:s.posterPath||cand.posterPath, mediaType:"tv"},"rescover")
           + '<div class="resinfo"><div class="restitle">'+esc(s.name)+'</div>'
           + '<div class="resmeta">'+(s.airYear?esc(s.airYear)+"年 ・ ":"")+(s.episodeCount?"全"+s.episodeCount+"話":"話数不明")+'</div></div>'
+          + '<div class="res-check" aria-hidden="true">✓</div>'
           + '</div>';
       }).join("");
       Array.prototype.forEach.call(box.querySelectorAll(".res"),function(el){
-        el.onclick=function(){ openShelfPickFor(cand, seasons[+el.dataset.idx]); };
+        el.onclick=function(){
+          var s=seasons[+el.dataset.idx];
+          if(selected[s.seasonNumber]){ delete selected[s.seasonNumber]; el.classList.remove("sel"); }
+          else { selected[s.seasonNumber]=s; el.classList.add("sel"); }
+          updateAddBtn();
+        };
       });
     }).catch(function(err){
       var box=document.getElementById("seasonList");
       if(!box) return;
       if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーが必要です。</div>'; return; }
       box.innerHTML='<div class="keynote">シーズン情報を取得できませんでした。</div>';
+    });
+  }
+
+  // チェックしたシーズンをまとめて同じ棚に追加する（1件でも複数件でも動作は共通）。
+  function openSeasonBatchShelfPick(cand, seasonList){
+    var typeLabel=typeLabelOf(cand);
+    var names=seasonList.map(function(s){ return s.name; }).join("・");
+    var h='<div class="grip"></div>'
+      + '<div class="prev">'+coverHtml(cand)+'<div><div class="t">'+esc(cand.title)+'</div>'
+      + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(cand.year?esc(cand.year)+"年":"")+'</div>'
+      + '<div class="m">選択中：'+esc(names)+'（'+seasonList.length+'件）</div></div></div>'
+      + '<h2 style="font-size:14px;margin-top:4px">棚を選ぶ</h2>'
+      + (seasonList.length>1 ? '<div class="keynote">選んだ'+seasonList.length+'件すべてが同じ棚に追加されます。</div>' : '')
+      + shelfChoicesHtml(null);
+    openSheet(h);
+    bindShelfChoices(function(status){
+      seasonList.forEach(function(s){
+        state.items.push(makeSeasonItem(cand, s, status));
+      });
+      save(); render(); closeSheet();
+      toast(seasonList.length+"件を"+STATUS_LABEL[status]+"に追加しました");
     });
   }
 
@@ -1378,7 +1442,10 @@
     }
     openDetail(id);
   });
-  document.getElementById("fab").addEventListener("click",function(){ openAddSheet(); });
+  document.getElementById("fab").addEventListener("click",function(){
+    this.classList.remove("squash"); void this.offsetWidth; this.classList.add("squash");
+    openAddSheet();
+  });
   document.getElementById("trendBtn").addEventListener("click",function(){ openTrendSheet(); });
   document.getElementById("exportLinkMain").addEventListener("click",function(e){ e.preventDefault(); exportItems(); });
   document.getElementById("importLinkMain").addEventListener("click",function(e){ e.preventDefault(); document.getElementById("importFileMain").click(); });
@@ -1394,7 +1461,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange };
 
   load();
   render();
