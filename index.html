@@ -833,6 +833,15 @@
     }
     return h;
   }
+  // 以前のキャッシュ形式（俳優詳細へのリンク機能を追加する前に保存されたキャスト情報）には
+  // personId が入っておらず、タップしても詳細に飛べない。日付が新しくても
+  // このケースは古い形式とみなして再取得する。
+  function creditsIsUsable(credits){
+    if(!credits) return false;
+    if((Date.now()-new Date(credits.at).getTime())>=WP_MAX_AGE_MS) return false;
+    if(credits.cast && credits.cast.length && credits.cast.some(function(c){ return c.personId===undefined; })) return false;
+    return true;
+  }
   function renderCastSection(item){
     var box=document.getElementById("castBody");
     if(!box) return;
@@ -841,7 +850,7 @@
       if(!card) return;
       openPersonSheet(card.dataset.personId, card.dataset.personName);
     };
-    if(item.credits && (Date.now()-new Date(item.credits.at).getTime())<WP_MAX_AGE_MS){
+    if(creditsIsUsable(item.credits)){
       box.innerHTML=creditsBodyHtml(item.credits);
       return;
     }
@@ -1619,7 +1628,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection };
 
   load();
   render();
