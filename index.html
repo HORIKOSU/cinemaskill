@@ -28,7 +28,7 @@
     line-height:1.5;
   }
   header.app{ background:var(--bg); padding:calc(12px + env(safe-area-inset-top)) 16px 0; }
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
   .brand .logo{font-size:22px}
   .brand h1{font-size:19px;margin:0;font-weight:800;letter-spacing:.02em}
   .brand .total{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;text-align:right;line-height:1.25}
@@ -245,6 +245,15 @@
   .cast-photo{width:44px;height:44px;flex:0 0 auto;border-radius:50%;object-fit:cover;background:var(--accent-soft);box-shadow:0 2px 6px rgba(0,0,0,.10)}
   .cast-photo.ph{display:flex;align-items:center;justify-content:center;font-size:17px;color:var(--accent-dk);opacity:.5}
   .cast-item-text{min-width:0;flex:1}
+
+  /* お気に入り俳優シート */
+  .actor-row{display:flex;align-items:center;gap:12px;padding:9px 4px;border-radius:10px;cursor:pointer}
+  .actor-row:active{background:var(--accent-soft)}
+  .fav-star-btn{flex:0 0 auto;border:none;background:none;font-size:23px;line-height:1;cursor:pointer;color:var(--accent);padding:4px}
+  .fav-star-btn:active{transform:scale(.9)}
+  .fav-remove-btn{flex:0 0 auto;border:1.5px solid var(--line);background:#fff;color:var(--muted);font-size:12px;font-weight:800;border-radius:999px;padding:6px 12px;cursor:pointer;font-family:inherit}
+  .fav-remove-btn:active{background:var(--accent-soft)}
+  .fav-empty{color:var(--muted);font-size:12.5px;line-height:1.7;padding:8px 2px}
   .cast-char-name{font-size:13.5px;font-weight:800;color:var(--ink);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cast-actor-name{font-size:11px;color:var(--muted);margin-top:1px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cast-empty{font-size:12px;color:var(--muted)}
@@ -266,6 +275,7 @@
     <h1>Cinemaskill</h1>
     <span class="total" id="totalCount"></span>
     <button class="skillbtn" id="trendBtn">📊 傾向</button>
+    <button class="skillbtn" id="favActorsBtn">⭐ 俳優</button>
   </div>
 </header>
 <div class="tabs" id="tabs" role="tablist">
@@ -309,6 +319,7 @@
   "use strict";
   var STORAGE_KEY="cinemaskill_items_v1";
   var TMDB_KEY_STORAGE="cinemaskill_tmdb_key";
+  var FAV_ACTORS_KEY="cinemaskill_fav_actors_v1"; // お気に入り俳優（作品データとは別に保存）
   var IMG_BASE="https://image.tmdb.org/t/p/w342";
 
   var MOVIE_GENRES={28:"アクション",12:"アドベンチャー",16:"アニメーション",35:"コメディ",80:"犯罪",99:"ドキュメンタリー",18:"ドラマ",10751:"ファミリー",14:"ファンタジー",36:"歴史",27:"ホラー",10402:"音楽",9648:"ミステリー",10749:"恋愛",878:"SF",10770:"TVムービー",53:"スリラー",10752:"戦争",37:"西部劇"};
@@ -318,19 +329,44 @@
   var STATUS_ORDER=["want","watching","done"];
 
   /* ---------- state / storage ---------- */
-  var state={ items:[], tab:"want", q:"", typeFilter:"all" };
+  var state={ items:[], tab:"want", q:"", typeFilter:"all", favActors:[] };
 
   function load(){
     try{
       var raw=localStorage.getItem(STORAGE_KEY);
       if(raw){ var data=JSON.parse(raw); state.items=(data&&data.items)||[]; }
     }catch(e){ state.items=[]; }
+    state.favActors=loadFavActors();
   }
   function save(){
     try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({v:1, items:state.items})); }catch(e){}
   }
   function tmdbKey(){ try{ return localStorage.getItem(TMDB_KEY_STORAGE)||""; }catch(e){ return ""; } }
   function setTmdbKey(v){ try{ localStorage.setItem(TMDB_KEY_STORAGE, v); }catch(e){} }
+
+  /* ---------- favorite actors (お気に入り俳優、作品データとは別のstorageキー) ---------- */
+  function loadFavActors(){
+    try{
+      var raw=localStorage.getItem(FAV_ACTORS_KEY);
+      if(raw){ var data=JSON.parse(raw); return (data&&data.actors)||[]; }
+    }catch(e){}
+    return [];
+  }
+  function saveFavActors(){
+    try{ localStorage.setItem(FAV_ACTORS_KEY, JSON.stringify({v:1, actors:state.favActors})); }catch(e){}
+  }
+  function isFavActor(personId){
+    return state.favActors.some(function(p){ return String(p.personId)===String(personId); });
+  }
+  function addFavActor(p){
+    if(isFavActor(p.personId)) return;
+    state.favActors.push({ personId:p.personId, name:p.name||"", profilePath:p.profilePath||null, addedAt:nowIso() });
+    saveFavActors();
+  }
+  function removeFavActor(personId){
+    state.favActors=state.favActors.filter(function(p){ return String(p.personId)!==String(personId); });
+    saveFavActors();
+  }
 
   function uid(){ return "i_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8); }
   function nowIso(){ return new Date().toISOString(); }
@@ -855,6 +891,114 @@
       if(!box) return;
       if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーを設定すると出演作を確認できます</div>'; return; }
       box.innerHTML='<div class="keynote">出演作を取得できませんでした</div>';
+    });
+  }
+
+  /* ---------- favorite actors (お気に入り俳優を名前で検索して登録) ---------- */
+  function searchTMDBPerson(query){
+    var key=tmdbKey();
+    if(!key) return Promise.reject({code:"NO_KEY"});
+    var url="https://api.themoviedb.org/3/search/person?api_key="+encodeURIComponent(key)
+      +"&query="+encodeURIComponent(query)+"&language=ja-JP&include_adult=false";
+    return fetch(url).then(function(r){
+      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
+      return r.json();
+    }).then(function(data){
+      return (data.results||[]).map(function(p){
+        var known=(p.known_for||[]).map(function(k){ return k.title||k.name||""; }).filter(Boolean).slice(0,2).join("・");
+        return { personId:p.id, name:p.name||"", profilePath:p.profile_path||null, knownFor:known };
+      });
+    });
+  }
+
+  function actorPhotoHtml(profilePath){
+    if(profilePath){
+      return '<img class="cast-photo" src="https://image.tmdb.org/t/p/w185'+profilePath+'" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb-icon="🧑" data-fb-cls="cast-photo" onerror="window.__cmImgFallback(this)">';
+    }
+    return '<div class="cast-photo ph">🧑</div>';
+  }
+
+  function openFavActorsSheet(){
+    var h='<div class="grip"></div><h2>⭐ お気に入り俳優</h2>'
+      + '<div class="keynote">俳優名で検索して、お気に入りに登録できます。登録した俳優をタップすると出演作の一覧が見られます。</div>'
+      + '<div class="search-row"><input id="actorSearchQ" placeholder="俳優名で検索"><button class="btn primary sbtn" id="actorSearchBtn">検索</button></div>'
+      + '<div id="actorSearchResults"></div>'
+      + '<h2 style="font-size:14px;margin-top:16px">登録済みのお気に入り</h2>'
+      + '<div id="favActorsList"></div>';
+    openSheet(h);
+    renderFavActorsList();
+    var qEl=document.getElementById("actorSearchQ");
+    function doSearch(){
+      var q=(qEl.value||"").trim();
+      if(!q) return;
+      var box=document.getElementById("actorSearchResults");
+      box.innerHTML='<div class="searching"><span class="spinner"></span> 検索中…</div>';
+      searchTMDBPerson(q).then(function(list){ renderActorSearchResults(box, list); })
+        .catch(function(err){
+          if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">先にTMDB APIキーを設定してください。</div>'; return; }
+          box.innerHTML='<div class="keynote">検索できませんでした。時間をおいて再度お試しください。</div>';
+        });
+    }
+    document.getElementById("actorSearchBtn").onclick=doSearch;
+    qEl.addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); doSearch(); } });
+  }
+
+  function renderActorSearchResults(box, list){
+    if(!list.length){ box.innerHTML='<div class="keynote">見つかりませんでした。別の名前で試してください。</div>'; return; }
+    box.innerHTML = list.map(function(p){
+      var fav=isFavActor(p.personId);
+      return '<div class="actor-row" data-id="'+p.personId+'">'
+        + actorPhotoHtml(p.profilePath)
+        + '<div class="cast-item-text"><div class="restitle">'+esc(displayName(p.name))+'</div>'
+        + (p.knownFor ? '<div class="resmeta">'+esc(p.knownFor)+'</div>' : '')+'</div>'
+        + '<button class="fav-star-btn" data-id="'+p.personId+'" aria-label="'+(fav?"お気に入り解除":"お気に入りに追加")+'">'+(fav?"★":"☆")+'</button>'
+        + '</div>';
+    }).join("");
+    Array.prototype.forEach.call(box.querySelectorAll(".fav-star-btn"),function(btn){
+      btn.onclick=function(e){
+        e.stopPropagation();
+        var p=list.filter(function(x){ return String(x.personId)===btn.dataset.id; })[0];
+        if(!p) return;
+        if(isFavActor(p.personId)){ removeFavActor(p.personId); btn.textContent="☆"; btn.setAttribute("aria-label","お気に入りに追加"); }
+        else{ addFavActor(p); btn.textContent="★"; btn.setAttribute("aria-label","お気に入り解除"); }
+        renderFavActorsList();
+      };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll(".actor-row"),function(el){
+      el.onclick=function(){
+        var p=list.filter(function(x){ return String(x.personId)===el.dataset.id; })[0];
+        if(p) openPersonSheet(p.personId, p.name);
+      };
+    });
+  }
+
+  function renderFavActorsList(){
+    var box=document.getElementById("favActorsList");
+    if(!box) return;
+    if(!state.favActors.length){ box.innerHTML='<div class="fav-empty">まだお気に入りの俳優がいません。上の検索から追加してください。</div>'; return; }
+    box.innerHTML = state.favActors.map(function(p){
+      return '<div class="actor-row" data-id="'+p.personId+'">'
+        + actorPhotoHtml(p.profilePath)
+        + '<div class="cast-item-text"><div class="restitle">'+esc(displayName(p.name))+'</div></div>'
+        + '<button class="fav-remove-btn" data-id="'+p.personId+'">解除</button>'
+        + '</div>';
+    }).join("");
+    Array.prototype.forEach.call(box.querySelectorAll(".fav-remove-btn"),function(btn){
+      btn.onclick=function(e){
+        e.stopPropagation();
+        removeFavActor(btn.dataset.id);
+        renderFavActorsList();
+        var searchBox=document.getElementById("actorSearchResults");
+        var starBtn=searchBox && searchBox.querySelector('.fav-star-btn[data-id="'+btn.dataset.id+'"]');
+        if(starBtn){ starBtn.textContent="☆"; starBtn.setAttribute("aria-label","お気に入りに追加"); }
+      };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll(".actor-row"),function(el){
+      el.onclick=function(e){
+        if(e.target.closest(".fav-remove-btn")) return;
+        var p=state.favActors.filter(function(x){ return String(x.personId)===el.dataset.id; })[0];
+        if(p) openPersonSheet(p.personId, p.name);
+      };
     });
   }
 
@@ -1444,6 +1588,7 @@
     openAddSheet();
   });
   document.getElementById("trendBtn").addEventListener("click",function(){ openTrendSheet(); });
+  document.getElementById("favActorsBtn").addEventListener("click",function(){ openFavActorsSheet(); });
   document.getElementById("exportLinkMain").addEventListener("click",function(e){ e.preventDefault(); exportItems(); });
   document.getElementById("importLinkMain").addEventListener("click",function(e){ e.preventDefault(); document.getElementById("importFileMain").click(); });
   document.getElementById("importFileMain").addEventListener("change",function(e){
@@ -1458,7 +1603,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor };
 
   load();
   render();
