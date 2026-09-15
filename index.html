@@ -121,6 +121,9 @@
   .sheet-x button{pointer-events:auto;width:44px;height:44px;flex:0 0 auto;margin-top:4px;border-radius:50%;border:none;background:var(--panel);color:var(--ink);font-size:19px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 10px rgba(28,36,64,.20),0 0 0 1px rgba(0,0,0,.06)}
   .sheet-x button:active{background:var(--line);transform:scale(.92)}
   .sheet h2{font-size:17px;margin:0 0 12px}
+  .person-fav-btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font-size:12.5px;font-weight:800;border-radius:999px;padding:7px 14px;cursor:pointer;font-family:inherit;margin:-6px 0 14px}
+  .person-fav-btn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-dk)}
+  .person-fav-btn:active{transform:scale(.96)}
 
   .shelf-choices{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:6px}
   .shelf-choices.two{grid-template-columns:1fr 1fr}
@@ -881,9 +884,22 @@
     });
   }
   function openPersonSheet(personId, personName){
-    var h='<div class="grip"></div><h2>'+esc(displayName(personName))+'の出演作</h2><div id="personResults"><div class="searching"><span class="spinner"></span> 取得中…</div></div><button class="btn ghost" id="personCloseBtn">閉じる</button>';
+    var favNow=isFavActor(personId);
+    var h='<div class="grip"></div><h2>'+esc(displayName(personName))+'の出演作</h2>'
+      + '<button class="person-fav-btn'+(favNow?" on":"")+'" id="personFavBtn">'+(favNow?"★ お気に入り済み":"☆ お気に入りに追加")+'</button>'
+      + '<div id="personResults"><div class="searching"><span class="spinner"></span> 取得中…</div></div><button class="btn ghost" id="personCloseBtn">閉じる</button>';
     openSheet(h);
     document.getElementById("personCloseBtn").onclick=closeSheet;
+    var favBtn=document.getElementById("personFavBtn");
+    favBtn.onclick=function(){
+      if(isFavActor(personId)){
+        removeFavActor(personId);
+        favBtn.textContent="☆ お気に入りに追加"; favBtn.classList.remove("on");
+      }else{
+        addFavActor({personId:personId, name:personName||"", profilePath:null});
+        favBtn.textContent="★ お気に入り済み"; favBtn.classList.add("on");
+      }
+    };
     fetchPersonCredits(personId).then(function(list){
       renderSearchResults(document.getElementById("personResults"), list);
     }).catch(function(err){
