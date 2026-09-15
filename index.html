@@ -31,9 +31,8 @@
   .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
   .brand .logo{font-size:22px}
   .brand h1{font-size:19px;margin:0;font-weight:800;letter-spacing:.02em}
-  .brand .total{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600;text-align:right;line-height:1.25}
-  .brand .total b{font-size:13px;color:var(--accent-dk);font-weight:800}
-  .skillbtn{margin-left:8px;border:none;background:var(--accent-soft);color:var(--accent-dk);font-family:inherit;font-weight:800;font-size:12.5px;padding:7px 13px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .skill-btns{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-left:auto}
+  .skillbtn{margin:0;border:none;background:var(--accent-soft);color:var(--accent-dk);font-family:inherit;font-weight:800;font-size:12.5px;padding:7px 13px;border-radius:999px;cursor:pointer;white-space:nowrap}
   .skillbtn:active{transform:scale(.95)}
 
   /* hero */
@@ -276,9 +275,10 @@
   <div class="brand">
     <span class="logo">🎬</span>
     <h1>Cinemaskill</h1>
-    <span class="total" id="totalCount"></span>
-    <button class="skillbtn" id="trendBtn">📊 傾向</button>
-    <button class="skillbtn" id="favActorsBtn">⭐ 俳優</button>
+    <div class="skill-btns">
+      <button class="skillbtn" id="trendBtn">📊 傾向</button>
+      <button class="skillbtn" id="favActorsBtn">⭐ 俳優</button>
+    </div>
   </div>
 </header>
 <div class="tabs" id="tabs" role="tablist">
@@ -357,6 +357,13 @@
   }
   function saveFavActors(){
     try{ localStorage.setItem(FAV_ACTORS_KEY, JSON.stringify({v:1, actors:state.favActors})); }catch(e){}
+    updateFavActorsBadge();
+  }
+  function updateFavActorsBadge(){
+    var btn=document.getElementById("favActorsBtn");
+    if(!btn) return;
+    var n=state.favActors.length;
+    btn.textContent = n ? ("⭐ 俳優 ("+n+")") : "⭐ 俳優";
   }
   function isFavActor(personId){
     return state.favActors.some(function(p){ return String(p.personId)===String(personId); });
@@ -561,8 +568,6 @@
     Array.prototype.forEach.call(document.querySelectorAll(".tab"),function(t){
       t.setAttribute("aria-selected", t.dataset.status===state.tab ? "true":"false");
     });
-    var total=state.items.length;
-    document.getElementById("totalCount").innerHTML = total ? ("登録 <b>"+total+"</b> 件") : "";
   }
 
   /* ---------- cover node ---------- */
@@ -653,6 +658,7 @@
     renderTabs();
     renderHero();
     renderList();
+    updateFavActorsBadge();
   }
 
   /* ---------- tab / chip switching ---------- */
@@ -948,7 +954,7 @@
       + '<div class="keynote">俳優名で検索して、お気に入りに登録できます。登録した俳優をタップすると出演作の一覧が見られます。</div>'
       + '<div class="search-row"><input id="actorSearchQ" placeholder="俳優名で検索"><button class="btn primary sbtn" id="actorSearchBtn">検索</button></div>'
       + '<div id="actorSearchResults"></div>'
-      + '<h2 style="font-size:14px;margin-top:16px">登録済みのお気に入り</h2>'
+      + '<h2 style="font-size:14px;margin-top:16px" id="favActorsCountHead">登録済みのお気に入り</h2>'
       + '<div id="favActorsList"></div>';
     openSheet(h);
     renderFavActorsList();
@@ -1000,6 +1006,8 @@
   function renderFavActorsList(){
     var box=document.getElementById("favActorsList");
     if(!box) return;
+    var headEl=document.getElementById("favActorsCountHead");
+    if(headEl) headEl.textContent="登録済みのお気に入り（"+state.favActors.length+"件）";
     if(!state.favActors.length){ box.innerHTML='<div class="fav-empty">まだお気に入りの俳優がいません。上の検索から追加してください。</div>'; return; }
     box.innerHTML = state.favActors.map(function(p){
       return '<div class="actor-row" data-id="'+p.personId+'">'
@@ -1628,7 +1636,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge };
 
   load();
   render();
