@@ -1031,13 +1031,10 @@
     h+='<div class="search-row"><input id="addQ" placeholder="作品名で検索（映画・ドラマ）"><button class="btn primary sbtn" id="doSearchBtn">検索</button></div>'
       +'<div id="addResults"></div>'
       +'<div class="or">または</div>'
-      +'<button class="btn ghost" id="manualBtn">🖊 手動で追加する（TMDBにない作品）</button>'
-      +'<div class="keynote" style="margin-top:10px;text-align:center">合言葉：<a id="setKeyLink3">'+(key?"変更する":"入力する")+'</a></div>';
+      +'<button class="btn ghost" id="manualBtn">🖊 手動で追加する（TMDBにない作品）</button>';
     openSheet(h);
     var setKeyLink=document.getElementById("setKeyLink");
     if(setKeyLink) setKeyLink.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
-    var setKeyLink3=document.getElementById("setKeyLink3");
-    if(setKeyLink3) setKeyLink3.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
     var qEl=document.getElementById("addQ");
     function doSearch(){
       var q=(qEl.value||"").trim();
@@ -1051,8 +1048,12 @@
             return;
           }
           var code=err&&err.code;
-          var extra = code===401 ? "合言葉が正しくない可能性があります。設定し直してください。" : "通信エラーが発生しました。時間をおいて再度お試しください。";
-          box.innerHTML='<div class="keynote">検索できませんでした（'+esc((err&&err.message)||String(code||""))+'）。<br>'+extra+'</div>';
+          if(code===401){
+            box.innerHTML='<div class="keynote">検索できませんでした（'+esc((err&&err.message)||"")+'）。<br>合言葉が正しくない可能性があります。<a id="setKeyLinkRetry">設定し直す</a></div>';
+            var lr=document.getElementById("setKeyLinkRetry"); if(lr) lr.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ doSearch(); }); };
+            return;
+          }
+          box.innerHTML='<div class="keynote">検索できませんでした（'+esc((err&&err.message)||String(code||""))+'）。<br>通信エラーが発生しました。時間をおいて再度お試しください。</div>';
         });
     }
     document.getElementById("doSearchBtn").onclick=doSearch;
@@ -1351,16 +1352,16 @@
 
   /* ---------- 合言葉の入力 ---------- */
   function promptTmdbKey(cb){
-    var cur=tmdbKey();
     // 入力欄には現在の合言葉を表示しない（画面を見られただけで漏れないようにするため）。
-    // 何も入力せずOKを押した場合は「変更しない」扱いとし、既存の合言葉をそのまま保持する。
-    var v=window.prompt("合言葉を入力してください。", "");
-    if(v===null){ if(cb) cb(); return; }
-    v=(v||"").trim();
-    if(!v){ if(cb) cb(); return; }
-    setTmdbKey(v);
-    toast("合言葉を保存しました");
-    if(cb) cb();
+    // 空欄のままOKを押した場合は「未入力のまま進んだ」ことにはせず、再入力を求める。
+    // キャンセルを押した場合のみ、後回しにできる（他の操作は続けられる）。
+    for(;;){
+      var v=window.prompt("合言葉を入力してください。", "");
+      if(v===null){ if(cb) cb(); return; }
+      v=(v||"").trim();
+      if(v){ setTmdbKey(v); toast("合言葉を保存しました"); if(cb) cb(); return; }
+      alert("合言葉が入力されていません。もう一度入力してください。\n（今は入力しない場合はキャンセルを押してください）");
+    }
   }
 
   /* ---------- detail sheet ---------- */
