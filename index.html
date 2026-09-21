@@ -1031,10 +1031,13 @@
     h+='<div class="search-row"><input id="addQ" placeholder="作品名で検索（映画・ドラマ）"><button class="btn primary sbtn" id="doSearchBtn">検索</button></div>'
       +'<div id="addResults"></div>'
       +'<div class="or">または</div>'
-      +'<button class="btn ghost" id="manualBtn">🖊 手動で追加する（TMDBにない作品）</button>';
+      +'<button class="btn ghost" id="manualBtn">🖊 手動で追加する（TMDBにない作品）</button>'
+      +'<div class="keynote" style="margin-top:10px;text-align:center">合言葉：<a id="setKeyLink3">'+(key?"変更する":"入力する")+'</a></div>';
     openSheet(h);
     var setKeyLink=document.getElementById("setKeyLink");
     if(setKeyLink) setKeyLink.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
+    var setKeyLink3=document.getElementById("setKeyLink3");
+    if(setKeyLink3) setKeyLink3.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
     var qEl=document.getElementById("addQ");
     function doSearch(){
       var q=(qEl.value||"").trim();
@@ -1352,7 +1355,8 @@
     var v=window.prompt("合言葉を入力してください。\n（空欄でOKを押すと解除します）", cur);
     if(v===null){ if(cb) cb(); return; }
     setTmdbKey((v||"").trim());
-    toast(v&&v.trim() ? "合言葉を保存しました" : "合言葉を解除しました");
+    if(v&&v.trim()){ toast("合言葉を保存しました"); }
+    else if(cur){ toast("合言葉を解除しました"); }
     if(cb) cb();
   }
 
@@ -1622,10 +1626,13 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey };
 
   load();
   render();
+  // 合言葉が未設定の状態でリンクを開いた場合は、その場で入力を促す
+  // （身内向けの初回セットアップをスムーズにするため。キャンセルしても他の操作は続けられる）
+  if(!tmdbKey()){ promptTmdbKey(); }
 })();
 </script>
 </body>
