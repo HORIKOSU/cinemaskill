@@ -282,7 +282,7 @@
   </div>
 </header>
 <div class="tabs" id="tabs" role="tablist">
-  <button class="tab" role="tab" data-status="want"     aria-selected="true"><span class="lbl">見たい</span><span class="cnt" id="cnt-want">0</span></button>
+  <button class="tab" role="tab" data-status="want"     aria-selected="true"><span class="lbl">観たい</span><span class="cnt" id="cnt-want">0</span></button>
   <button class="tab" role="tab" data-status="watching" aria-selected="false"><span class="lbl">観てる</span><span class="cnt" id="cnt-watching">0</span></button>
   <button class="tab" role="tab" data-status="done"     aria-selected="false"><span class="lbl">観た</span><span class="cnt" id="cnt-done">0</span></button>
 </div>
@@ -329,7 +329,7 @@
   var MOVIE_GENRES={28:"アクション",12:"アドベンチャー",16:"アニメーション",35:"コメディ",80:"犯罪",99:"ドキュメンタリー",18:"ドラマ",10751:"ファミリー",14:"ファンタジー",36:"歴史",27:"ホラー",10402:"音楽",9648:"ミステリー",10749:"恋愛",878:"SF",10770:"TVムービー",53:"スリラー",10752:"戦争",37:"西部劇"};
   var TV_GENRES={10759:"アクション＆アドベンチャー",16:"アニメーション",35:"コメディ",80:"犯罪",99:"ドキュメンタリー",18:"ドラマ",10751:"ファミリー",10762:"キッズ",9648:"ミステリー",10763:"ニュース",10764:"リアリティ",10765:"SF＆ファンタジー",10766:"ソープオペラ",10767:"トーク",10768:"戦争＆政治",37:"西部劇"};
 
-  var STATUS_LABEL={want:"見たい",watching:"観てる",done:"観た"};
+  var STATUS_LABEL={want:"観たい",watching:"観てる",done:"観た"};
   var STATUS_ORDER=["want","watching","done"];
 
   /* ---------- state / storage ---------- */
@@ -575,7 +575,7 @@
       +  '<div class="hero-split-bar">'+typeSplitBarHtml(t,total)+'</div>'
       +  '<div class="hero-split-label">🎬 映画 '+t.movie+' ・ 📺 ドラマ '+t.tv+' ・ 🎨 アニメ '+t.anime+'</div>'
       +'</div>'
-      +'<div class="hero-sub-row"><span class="hero-chip">見たい '+c.want+'</span><span class="hero-chip">観てる '+c.watching+'</span></div>';
+      +'<div class="hero-sub-row"><span class="hero-chip">観たい '+c.want+'</span><span class="hero-chip">観てる '+c.watching+'</span></div>';
     document.getElementById("heroStat").innerHTML=h;
   }
 
@@ -667,7 +667,7 @@
     var list=visibleItems();
     var el=document.getElementById("list");
     if(!list.length){
-      var msg = state.tab==="want" ? "まだ「見たい」作品がありません" : state.tab==="watching" ? "今、観てる作品はありません" : "まだ「観た」作品がありません";
+      var msg = state.tab==="want" ? "まだ「観たい」作品がありません" : state.tab==="watching" ? "今、観てる作品はありません" : "まだ「観た」作品がありません";
       el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">🎬</div><p>'+msg+'</p><p>右下の「＋ 追加する」から登録できます</p></div>';
       return;
     }
@@ -1567,7 +1567,7 @@
     var maxCnt=stats.length?stats[0].count:1;
     var h='<div class="grip"></div><h2>📊 視聴の傾向</h2>'
       + '<div class="sk-summary">'
-      +   '<div><span class="sk-big">'+c.want+'</span><span class="sk-cap">見たい</span></div>'
+      +   '<div><span class="sk-big">'+c.want+'</span><span class="sk-cap">観たい</span></div>'
       +   '<div><span class="sk-big">'+c.watching+'</span><span class="sk-cap">観てる</span></div>'
       +   '<div><span class="sk-big">'+c.done+'</span><span class="sk-cap">観た</span></div>'
       + '</div>'
