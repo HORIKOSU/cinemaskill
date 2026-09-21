@@ -1351,17 +1351,49 @@
   }
 
   /* ---------- 合言葉の入力 ---------- */
+  // 入力された合言葉を、実際に中継サーバーへ問い合わせて検証する。
+  // 軽量なTMDBの/configurationエンドポイントを使う（合言葉が合っていれば200、間違っていれば401が返る）。
+  // 中継サーバー自体に到達できない（オフライン等）場合は判定不能として扱う（呼び出し側でフォールバック）。
+  function verifyPassphrase(pw){
+    var url=PROXY_BASE_URL.replace(/\/$/,"")+"/tmdb/configuration?pw="+encodeURIComponent(pw);
+    return fetch(url).then(function(r){
+      if(r.status===401) return false;
+      return true;
+    });
+  }
+
   function promptTmdbKey(cb){
     // 入力欄には現在の合言葉を表示しない（画面を見られただけで漏れないようにするため）。
-    // 空欄のままOKを押した場合は「未入力のまま進んだ」ことにはせず、再入力を求める。
+    // 空欄のままOKを押した場合／間違った合言葉を入力した場合は、いずれも「進めた」ことにはせず再入力を求める。
     // キャンセルを押した場合のみ、後回しにできる（他の操作は続けられる）。
-    for(;;){
+    function ask(){
       var v=window.prompt("合言葉を入力してください。", "");
       if(v===null){ if(cb) cb(); return; }
       v=(v||"").trim();
-      if(v){ setTmdbKey(v); toast("合言葉を保存しました"); if(cb) cb(); return; }
-      alert("合言葉が入力されていません。もう一度入力してください。\n（今は入力しない場合はキャンセルを押してください）");
+      if(!v){
+        alert("合言葉が入力されていません。もう一度入力してください。\n（今は入力しない場合はキャンセルを押してください）");
+        ask();
+        return;
+      }
+      toast("合言葉を確認中…");
+      verifyPassphrase(v).then(function(ok){
+        if(!ok){
+          alert("合言葉が正しくありません。もう一度入力してください。\n（今は入力しない場合はキャンセルを押してください）");
+          ask();
+          return;
+        }
+        setTmdbKey(v);
+        toast("合言葉を保存しました");
+        if(cb) cb();
+      }).catch(function(){
+        // 中継サーバーに接続できない等、合言葉が正しいか確認できない場合は、
+        // ブロックしすぎないようそのまま保存する（後で検索等が失敗すれば401リトライ導線に入る）。
+        setTmdbKey(v);
+        toast("合言葉を保存しました（確認できませんでした）");
+        if(cb) cb();
+      });
     }
+    ask();
   }
 
   /* ---------- detail sheet ---------- */
@@ -1630,7 +1662,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase };
 
   load();
   render();
