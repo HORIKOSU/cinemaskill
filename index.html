@@ -321,7 +321,8 @@
 (function(){
   "use strict";
   var STORAGE_KEY="cinemaskill_items_v1";
-  var TMDB_KEY_STORAGE="cinemaskill_tmdb_key";
+  var TMDB_KEY_STORAGE="cinemaskill_tmdb_key"; // 実体は「合言葉」。中継サーバー(Cloudflare Worker)経由でTMDBにアクセスするための認証に使う
+  var PROXY_BASE_URL="https://cinemaskill-proxy.horiksu.workers.dev"; // TMDB中継サーバー（合言葉が正しい時だけTMDBへ中継してくれる）
   var FAV_ACTORS_KEY="cinemaskill_fav_actors_v1"; // お気に入り俳優（作品データとは別に保存）
   var IMG_BASE="https://image.tmdb.org/t/p/w342";
 
@@ -346,6 +347,25 @@
   }
   function tmdbKey(){ try{ return localStorage.getItem(TMDB_KEY_STORAGE)||""; }catch(e){ return ""; } }
   function setTmdbKey(v){ try{ localStorage.setItem(TMDB_KEY_STORAGE, v); }catch(e){} }
+  // 中継サーバー(Cloudflare Worker)経由でTMDBのAPIを呼ぶ共通ヘルパー。
+  // path例: "search/multi" / query: {query:"...", language:"ja-JP"} など。
+  // 合言葉が未設定なら従来通り {code:"NO_KEY"} を投げる（呼び出し側の分岐はそのまま使える）。
+  function tmdbFetch(path, query){
+    var pw=tmdbKey();
+    if(!pw) return Promise.reject({code:"NO_KEY"});
+    var qs=Object.keys(query||{}).map(function(k){
+      return encodeURIComponent(k)+"="+encodeURIComponent(query[k]);
+    }).join("&");
+    var url=PROXY_BASE_URL.replace(/\/$/,"")+"/tmdb/"+path+(qs?"?"+qs+"&":"?")+"pw="+encodeURIComponent(pw);
+    return fetch(url).then(function(r){
+      if(!r.ok){
+        return r.json().catch(function(){return null;}).then(function(j){
+          throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)};
+        });
+      }
+      return r.json();
+    });
+  }
 
   /* ---------- favorite actors (お気に入り俳優、作品データとは別のstorageキー) ---------- */
   function loadFavActors(){
@@ -699,19 +719,8 @@
 
   /* ---------- TMDB search ---------- */
   function searchTMDB(query){
-    var key=tmdbKey();
-    if(!key){ return Promise.reject({code:"NO_KEY"}); }
-    var url="https://api.themoviedb.org/3/search/multi?api_key="+encodeURIComponent(key)
-      +"&query="+encodeURIComponent(query)+"&language=ja-JP&include_adult=false&region=JP";
-    return fetch(url).then(function(r){
-      if(!r.ok){
-        return r.json().catch(function(){return null;}).then(function(j){
-          var err={code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)};
-          throw err;
-        });
-      }
-      return r.json();
-    }).then(function(data){
+    return tmdbFetch("search/multi", {query:query, language:"ja-JP", include_adult:"false", region:"JP"})
+    .then(function(data){
       return (data.results||[]).filter(function(it){ return it.media_type==="movie"||it.media_type==="tv"; }).map(function(it){
         var isMovie = it.media_type==="movie";
         var dateStr = isMovie ? it.release_date : it.first_air_date;
@@ -731,13 +740,9 @@
   /* ---------- TMDB watch providers ---------- */
   var WP_MAX_AGE_MS = 14*24*60*60*1000; // re-check after 2 weeks (lineups change)
   function fetchWatchProviders(item){
-    var key=tmdbKey();
-    if(!key || !item.tmdbId) return Promise.reject({code:"NO_KEY"});
-    var url="https://api.themoviedb.org/3/"+item.mediaType+"/"+item.tmdbId+"/watch/providers?api_key="+encodeURIComponent(key);
-    return fetch(url).then(function(r){
-      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
-      return r.json();
-    }).then(function(data){
+    if(!item.tmdbId) return Promise.reject({code:"NO_KEY"});
+    return tmdbFetch(item.mediaType+"/"+item.tmdbId+"/watch/providers", {})
+    .then(function(data){
       var jp=(data.results&&data.results.JP)||null;
       function names(arr){ return (arr||[]).map(function(p){ return {name:p.provider_name, logo:p.logo_path}; }); }
       return { at: nowIso(), flatrate: names(jp&&jp.flatrate), rent: names(jp&&jp.rent), buy: names(jp&&jp.buy), link: (jp&&jp.link)||null };
@@ -768,7 +773,7 @@
       item.wp=wp; save();
       box.innerHTML=wpBodyHtml(wp);
     }).catch(function(err){
-      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="wp-empty">TMDB APIキーを設定すると配信状況を確認できます</div>'; return; }
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="wp-empty">合言葉を設定すると配信状況を確認できます</div>'; return; }
       box.innerHTML='<div class="wp-empty">配信状況を取得できませんでした</div>';
     });
   }
@@ -780,13 +785,9 @@
     return n;
   }
   function fetchTvSeasons(tmdbId){
-    var key=tmdbKey();
-    if(!key || !tmdbId) return Promise.reject({code:"NO_KEY"});
-    var url="https://api.themoviedb.org/3/tv/"+tmdbId+"?api_key="+encodeURIComponent(key)+"&language=ja-JP";
-    return fetch(url).then(function(r){
-      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
-      return r.json();
-    }).then(function(data){
+    if(!tmdbId) return Promise.reject({code:"NO_KEY"});
+    return tmdbFetch("tv/"+tmdbId, {language:"ja-JP"})
+    .then(function(data){
       return (data.seasons||[]).map(function(s){
         return {
           seasonNumber: s.season_number,
@@ -803,13 +804,9 @@
   /* ---------- TMDB credits (cast/director) ---------- */
   var CAST_DISPLAY_MAX=20; // top N cast members shown in the detail sheet (TMDB returns them billing-order)
   function fetchCredits(item){
-    var key=tmdbKey();
-    if(!key || !item.tmdbId) return Promise.reject({code:"NO_KEY"});
-    var url="https://api.themoviedb.org/3/"+item.mediaType+"/"+item.tmdbId+"/credits?api_key="+encodeURIComponent(key)+"&language=ja-JP";
-    return fetch(url).then(function(r){
-      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
-      return r.json();
-    }).then(function(data){
+    if(!item.tmdbId) return Promise.reject({code:"NO_KEY"});
+    return tmdbFetch(item.mediaType+"/"+item.tmdbId+"/credits", {language:"ja-JP"})
+    .then(function(data){
       var cast=(data.cast||[]).slice(0,CAST_DISPLAY_MAX).map(function(c){
         return { name:c.name||"", character:c.character||"", profile:c.profile_path||null, personId:c.id||null };
       });
@@ -865,7 +862,7 @@
       item.credits=credits; save();
       box.innerHTML=creditsBodyHtml(credits);
     }).catch(function(err){
-      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="cast-empty">TMDB APIキーを設定するとキャスト情報を確認できます</div>'; return; }
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="cast-empty">合言葉を設定するとキャスト情報を確認できます</div>'; return; }
       box.innerHTML='<div class="cast-empty">キャスト情報を取得できませんでした</div>';
     });
   }
@@ -882,13 +879,8 @@
     };
   }
   function fetchPersonCredits(personId){
-    var key=tmdbKey();
-    if(!key) return Promise.reject({code:"NO_KEY"});
-    var url="https://api.themoviedb.org/3/person/"+personId+"/combined_credits?api_key="+encodeURIComponent(key)+"&language=ja-JP";
-    return fetch(url).then(function(r){
-      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
-      return r.json();
-    }).then(function(data){
+    return tmdbFetch("person/"+personId+"/combined_credits", {language:"ja-JP"})
+    .then(function(data){
       var seen={};
       return (data.cast||[])
         .filter(function(it){ return it.media_type==="movie"||it.media_type==="tv"; })
@@ -920,21 +912,15 @@
     }).catch(function(err){
       var box=document.getElementById("personResults");
       if(!box) return;
-      if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーを設定すると出演作を確認できます</div>'; return; }
+      if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">合言葉を設定すると出演作を確認できます</div>'; return; }
       box.innerHTML='<div class="keynote">出演作を取得できませんでした</div>';
     });
   }
 
   /* ---------- favorite actors (お気に入り俳優を名前で検索して登録) ---------- */
   function searchTMDBPerson(query){
-    var key=tmdbKey();
-    if(!key) return Promise.reject({code:"NO_KEY"});
-    var url="https://api.themoviedb.org/3/search/person?api_key="+encodeURIComponent(key)
-      +"&query="+encodeURIComponent(query)+"&language=ja-JP&include_adult=false";
-    return fetch(url).then(function(r){
-      if(!r.ok){ return r.json().catch(function(){return null;}).then(function(j){ throw {code:r.status, message:(j&&j.status_message)||("HTTP "+r.status)}; }); }
-      return r.json();
-    }).then(function(data){
+    return tmdbFetch("search/person", {query:query, language:"ja-JP", include_adult:"false"})
+    .then(function(data){
       return (data.results||[]).map(function(p){
         var known=(p.known_for||[]).map(function(k){ return k.title||k.name||""; }).filter(Boolean).slice(0,2).join("・");
         return { personId:p.id, name:p.name||"", profilePath:p.profile_path||null, knownFor:known };
@@ -966,7 +952,7 @@
       box.innerHTML='<div class="searching"><span class="spinner"></span> 検索中…</div>';
       searchTMDBPerson(q).then(function(list){ renderActorSearchResults(box, list); })
         .catch(function(err){
-          if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">先にTMDB APIキーを設定してください。</div>'; return; }
+          if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">先に合言葉を設定してください。</div>'; return; }
           box.innerHTML='<div class="keynote">検索できませんでした。時間をおいて再度お試しください。</div>';
         });
     }
@@ -1040,7 +1026,7 @@
     var key=tmdbKey();
     var h='<div class="grip"></div><h2>作品を追加</h2>';
     if(!key){
-      h+='<div class="keynote">TMDB APIキーが未設定です。検索・自動取得を使うには <a id="setKeyLink">キーを設定</a> してください（無料）。<br>キーがなくても下の「手動で追加」は使えます。</div>';
+      h+='<div class="keynote">合言葉が未設定です。検索・自動取得を使うには <a id="setKeyLink">合言葉を入力</a> してください。<br>合言葉がなくても下の「手動で追加」は使えます。</div>';
     }
     h+='<div class="search-row"><input id="addQ" placeholder="作品名で検索（映画・ドラマ）"><button class="btn primary sbtn" id="doSearchBtn">検索</button></div>'
       +'<div id="addResults"></div>'
@@ -1057,12 +1043,12 @@
       box.innerHTML='<div class="searching"><span class="spinner"></span> 検索中…</div>';
       searchTMDB(q).then(function(list){ renderSearchResults(box, list); })
         .catch(function(err){
-          if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">先にTMDB APIキーを設定してください。<a id="setKeyLink2">キーを設定</a></div>';
+          if(err && err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">先に合言葉を入力してください。<a id="setKeyLink2">合言葉を入力</a></div>';
             var l2=document.getElementById("setKeyLink2"); if(l2) l2.onclick=function(e){ e.preventDefault(); promptTmdbKey(function(){ openAddSheet(); }); };
             return;
           }
           var code=err&&err.code;
-          var extra = code===401 ? "APIキーが正しくない可能性があります。設定し直してください。" : "通信エラーが発生しました。時間をおいて再度お試しください。";
+          var extra = code===401 ? "合言葉が正しくない可能性があります。設定し直してください。" : "通信エラーが発生しました。時間をおいて再度お試しください。";
           box.innerHTML='<div class="keynote">検索できませんでした（'+esc((err&&err.message)||String(code||""))+'）。<br>'+extra+'</div>';
         });
     }
@@ -1158,7 +1144,7 @@
     }).catch(function(err){
       var box=document.getElementById("seasonList");
       if(!box) return;
-      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーが必要です。</div>'; return; }
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">合言葉が必要です。</div>'; return; }
       box.innerHTML='<div class="keynote">シーズン情報を取得できませんでした。</div>';
     });
   }
@@ -1285,7 +1271,7 @@
     }).catch(function(err){
       var box=document.getElementById("seasonEditList");
       if(!box) return;
-      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">TMDB APIキーが必要です。</div>'; return; }
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="keynote">合言葉が必要です。</div>'; return; }
       box.innerHTML='<div class="keynote">シーズン情報を取得できませんでした。</div>';
     });
   }
@@ -1360,13 +1346,13 @@
     });
   }
 
-  /* ---------- TMDB key prompt ---------- */
+  /* ---------- 合言葉の入力 ---------- */
   function promptTmdbKey(cb){
     var cur=tmdbKey();
-    var v=window.prompt("TMDB APIキー（v3 auth）を貼り付けてください。\n（空欄でOKを押すと解除します）\n\n取得方法：themoviedb.org でアカウント登録 → 設定 → API → 「APIキー」をコピー。", cur);
+    var v=window.prompt("合言葉を入力してください。\n（空欄でOKを押すと解除します）", cur);
     if(v===null){ if(cb) cb(); return; }
     setTmdbKey((v||"").trim());
-    toast(v&&v.trim() ? "APIキーを保存しました" : "APIキーを解除しました");
+    toast(v&&v.trim() ? "合言葉を保存しました" : "合言葉を解除しました");
     if(cb) cb();
   }
 
