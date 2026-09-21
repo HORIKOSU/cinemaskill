@@ -1352,11 +1352,14 @@
   /* ---------- 合言葉の入力 ---------- */
   function promptTmdbKey(cb){
     var cur=tmdbKey();
-    var v=window.prompt("合言葉を入力してください。\n（空欄でOKを押すと解除します）", cur);
+    // 入力欄には現在の合言葉を表示しない（画面を見られただけで漏れないようにするため）。
+    // 何も入力せずOKを押した場合は「変更しない」扱いとし、既存の合言葉をそのまま保持する。
+    var v=window.prompt("合言葉を入力してください。", "");
     if(v===null){ if(cb) cb(); return; }
-    setTmdbKey((v||"").trim());
-    if(v&&v.trim()){ toast("合言葉を保存しました"); }
-    else if(cur){ toast("合言葉を解除しました"); }
+    v=(v||"").trim();
+    if(!v){ if(cb) cb(); return; }
+    setTmdbKey(v);
+    toast("合言葉を保存しました");
     if(cb) cb();
   }
 
