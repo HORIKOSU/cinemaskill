@@ -295,6 +295,7 @@
     <button class="chip" data-type="tv">📺 ドラマ</button>
     <button class="chip" data-type="anime">🎨 アニメ</button>
   </div>
+  <div class="chips" id="providerChips" style="display:none"></div>
   <div class="toolbar">
     <div class="search">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -333,7 +334,7 @@
   var STATUS_ORDER=["want","watching","done"];
 
   /* ---------- state / storage ---------- */
-  var state={ items:[], tab:"want", q:"", typeFilter:"all", favActors:[] };
+  var state={ items:[], tab:"want", q:"", typeFilter:"all", favActors:[], providerFilter:"all", providerLoading:false };
 
   function load(){
     try{
@@ -652,6 +653,12 @@
       var q=state.q;
       list=list.filter(function(it){ return titleMatchesQuery(it.title, q); });
     }
+    // 「観たい」タブ限定：配信サービス（見放題／サブスク）での絞り込み（2026-10-01追加）
+    if(state.tab==="want" && state.providerFilter && state.providerFilter!=="all"){
+      list=list.filter(function(it){
+        return it.wp && it.wp.flatrate && it.wp.flatrate.some(function(p){ return p && p.name===state.providerFilter; });
+      });
+    }
     // 3タブ共通：作品の公開年（item.year）が新しい順。年が同じ・未設定の場合は
     // 追加日が新しい順にフォールバックする（2026-09-14変更。従来は棚ごとに
     // 優先度順／更新日順／観た日順とバラバラだったのを統一）。
@@ -678,7 +685,74 @@
     renderTabs();
     renderHero();
     renderList();
+    renderProviderChips();
     updateFavActorsBadge();
+    if(state.tab==="want") ensureWantProvidersFresh();
+  }
+
+  /* ---------- 「観たい」タブの配信サービス絞り込み（2026-10-01追加） ---------- */
+  // 対象は「観たい」棚のTMDB作品のみ（手動追加は配信情報を取得しようがないため対象外）。
+  function wantItemsForProviders(){
+    return state.items.filter(function(it){ return it.status==="want" && it.tmdbId; });
+  }
+  // 絞り込みチップに出す配信サービス名の一覧（見放題／サブスクのみ。登録件数の多い順→五十音順）。
+  function distinctFlatrateProviders(){
+    var counts={};
+    wantItemsForProviders().forEach(function(it){
+      if(it.wp && it.wp.flatrate){
+        it.wp.flatrate.forEach(function(p){ if(p && p.name){ counts[p.name]=(counts[p.name]||0)+1; } });
+      }
+    });
+    return Object.keys(counts).sort(function(a,b){
+      var d=counts[b]-counts[a];
+      if(d) return d;
+      return a.localeCompare(b,"ja");
+    });
+  }
+  // 「観たい」タブの全作品の配信状況を自動でバックグラウンド取得する（詳細シートを開かなくても一覧の絞り込みに使えるようにするため）。
+  // 既にキャッシュが新しい（14日以内）作品は再取得しない。合言葉が未設定の場合は取得しようがないので何もしない。
+  function ensureWantProvidersFresh(){
+    if(state.providerLoading) return; // 二重実行防止
+    if(!tmdbKey()) return;
+    var targets=wantItemsForProviders().filter(function(it){
+      return !(it.wp && (Date.now()-new Date(it.wp.at).getTime())<WP_MAX_AGE_MS);
+    });
+    if(!targets.length) return;
+    state.providerLoading=true;
+    renderProviderChips();
+    Promise.all(targets.map(function(it){
+      return fetchWatchProviders(it).then(function(wp){ it.wp=wp; }).catch(function(){ /* 取得できなかった作品は絞り込み候補に出ないだけ（ブロックしない） */ });
+    })).then(function(){
+      save();
+      state.providerLoading=false;
+      renderProviderChips();
+      renderList();
+    });
+  }
+  function renderProviderChips(){
+    var box=document.getElementById("providerChips");
+    if(!box) return;
+    if(state.tab!=="want"){ box.style.display="none"; return; }
+    var providers=distinctFlatrateProviders();
+    if(state.providerFilter!=="all" && providers.indexOf(state.providerFilter)<0){ state.providerFilter="all"; }
+    if(!providers.length){
+      if(state.providerLoading){
+        box.style.display="flex";
+        box.innerHTML='<div class="searching" style="padding:2px 2px;justify-content:flex-start"><span class="spinner"></span> 配信情報を確認中…</div>';
+      } else {
+        box.style.display="none"; box.innerHTML="";
+      }
+      return;
+    }
+    box.style.display="flex";
+    var h='<button class="chip'+(state.providerFilter==="all"?" cur":"")+'" data-provider="all">すべての配信</button>';
+    providers.forEach(function(name){
+      h+='<button class="chip'+(state.providerFilter===name?" cur":"")+'" data-provider="'+esc(name)+'">'+esc(name)+'</button>';
+    });
+    if(state.providerLoading){
+      h+='<span class="chip" style="pointer-events:none;opacity:.6">確認中…</span>';
+    }
+    box.innerHTML=h;
   }
 
   /* ---------- tab / chip switching ---------- */
@@ -882,18 +956,39 @@
     return tmdbFetch("person/"+personId+"/combined_credits", {language:"ja-JP"})
     .then(function(data){
       var seen={};
+      // 並び替え（人気順／新しい順）は表示側(sortPersonCredits)でまとめて行うため、
+      // ここでは重複排除だけ行い、ソートや件数の絞り込みはしない。
       return (data.cast||[])
         .filter(function(it){ return it.media_type==="movie"||it.media_type==="tv"; })
         .map(personCandidateFrom)
-        .filter(function(c){ var k=c.mediaType+":"+c.tmdbId; if(seen[k]) return false; seen[k]=true; return true; })
-        .sort(function(a,b){ return (b._pop||0)-(a._pop||0); })
-        .slice(0,30);
+        .filter(function(c){ var k=c.mediaType+":"+c.tmdbId; if(seen[k]) return false; seen[k]=true; return true; });
     });
+  }
+  // 俳優の出演作一覧の並び替え。既定は人気順（従来通り）、新しい順は公開年が新しい順
+  // （年が同じ・未設定の場合は人気順でタイブレーク）。表示件数は最大30件に絞る。
+  var PERSON_RESULTS_MAX=30;
+  function sortPersonCredits(list, sortMode){
+    var sorted=(list||[]).slice();
+    if(sortMode==="new"){
+      sorted.sort(function(a,b){
+        var yd=(parseInt(b.year,10)||0)-(parseInt(a.year,10)||0);
+        if(yd) return yd;
+        return (b._pop||0)-(a._pop||0);
+      });
+    } else {
+      sorted.sort(function(a,b){ return (b._pop||0)-(a._pop||0); });
+    }
+    return sorted.slice(0, PERSON_RESULTS_MAX);
   }
   function openPersonSheet(personId, personName){
     var favNow=isFavActor(personId);
+    var personFullList=null, personSortMode="pop"; // 初期表示は従来通り人気順
     var h='<div class="grip"></div><h2>'+esc(displayName(personName))+'の出演作</h2>'
       + '<button class="person-fav-btn'+(favNow?" on":"")+'" id="personFavBtn">'+(favNow?"★ お気に入り済み":"☆ お気に入りに追加")+'</button>'
+      + '<div class="shelf-choices two" id="personSortChoices">'
+      +   '<button class="shelf-btn cur" data-sort="pop">人気順</button>'
+      +   '<button class="shelf-btn" data-sort="new">新しい順</button>'
+      + '</div>'
       + '<div id="personResults"><div class="searching"><span class="spinner"></span> 取得中…</div></div><button class="btn ghost" id="personCloseBtn">閉じる</button>';
     openSheet(h);
     document.getElementById("personCloseBtn").onclick=closeSheet;
@@ -907,8 +1002,21 @@
         favBtn.textContent="★ お気に入り済み"; favBtn.classList.add("on");
       }
     };
+    function renderPersonResults(){
+      if(!personFullList) return;
+      renderSearchResults(document.getElementById("personResults"), sortPersonCredits(personFullList, personSortMode));
+    }
+    Array.prototype.forEach.call(document.querySelectorAll("#personSortChoices .shelf-btn"),function(btn){
+      btn.onclick=function(){
+        if(btn.dataset.sort===personSortMode) return;
+        personSortMode=btn.dataset.sort;
+        Array.prototype.forEach.call(document.querySelectorAll("#personSortChoices .shelf-btn"),function(b){ b.classList.toggle("cur", b===btn); });
+        renderPersonResults();
+      };
+    });
     fetchPersonCredits(personId).then(function(list){
-      renderSearchResults(document.getElementById("personResults"), list);
+      personFullList=list;
+      renderPersonResults();
     }).catch(function(err){
       var box=document.getElementById("personResults");
       if(!box) return;
@@ -1625,6 +1733,12 @@
     Array.prototype.forEach.call(document.querySelectorAll("#typeChips .chip"),function(b){b.classList.toggle("cur",b===c);});
     renderList();
   });
+  document.getElementById("providerChips").addEventListener("click",function(e){
+    var c=e.target.closest(".chip"); if(!c || c.dataset.provider===undefined) return;
+    state.providerFilter=c.dataset.provider;
+    renderProviderChips();
+    renderList();
+  });
   document.getElementById("search").addEventListener("input",function(e){ state.q=e.target.value; renderList(); });
   document.getElementById("list").addEventListener("click",function(e){
     var starEl=e.target.closest(".priority-star");
@@ -1662,7 +1776,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips };
 
   load();
   render();
