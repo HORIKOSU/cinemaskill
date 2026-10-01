@@ -747,7 +747,7 @@
     box.style.display="flex";
     var h='<button class="chip'+(state.providerFilter==="all"?" cur":"")+'" data-provider="all">すべての配信</button>';
     providers.forEach(function(name){
-      h+='<button class="chip'+(state.providerFilter===name?" cur":"")+'" data-provider="'+esc(name)+'">'+esc(name)+'</button>';
+      h+='<button class="chip'+(state.providerFilter===name?" cur":"")+'" data-provider="'+esc(name)+'">'+esc(name)+'のみ</button>';
     });
     if(state.providerLoading){
       h+='<span class="chip" style="pointer-events:none;opacity:.6">確認中…</span>';
@@ -985,7 +985,7 @@
     var personFullList=null, personSortMode="pop"; // 初期表示は従来通り人気順
     var h='<div class="grip"></div><h2>'+esc(displayName(personName))+'の出演作</h2>'
       + '<button class="person-fav-btn'+(favNow?" on":"")+'" id="personFavBtn">'+(favNow?"★ お気に入り済み":"☆ お気に入りに追加")+'</button>'
-      + '<div class="shelf-choices two" id="personSortChoices">'
+      + '<div class="shelf-choices two" id="personSortChoices" style="margin-bottom:16px">'
       +   '<button class="shelf-btn cur" data-sort="pop">人気順</button>'
       +   '<button class="shelf-btn" data-sort="new">新しい順</button>'
       + '</div>'
