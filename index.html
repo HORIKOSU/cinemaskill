@@ -1274,11 +1274,22 @@
       + shelfChoicesHtml(null);
     openSheet(h);
     bindShelfChoices(function(status){
-      seasonList.forEach(function(s){
+      var dupNames=[];
+      var newOnes=seasonList.filter(function(s){
+        if(findExistingItem(cand, s)){ dupNames.push(s.name); return false; }
+        return true;
+      });
+      newOnes.forEach(function(s){
         state.items.push(makeSeasonItem(cand, s, status));
       });
       save(); render(); closeSheet();
-      toast(seasonList.length+"件を"+STATUS_LABEL[status]+"に追加しました");
+      if(!newOnes.length){
+        toast("選んだシーズンはすべて登録済みです");
+        return;
+      }
+      var msg=newOnes.length+"件を"+STATUS_LABEL[status]+"に追加しました";
+      if(dupNames.length) msg+="（"+dupNames.length+"件は登録済みのためスキップ）";
+      toast(msg);
     });
   }
 
@@ -1295,6 +1306,13 @@
       + shelfChoicesHtml(null);
     openSheet(h);
     bindShelfChoices(function(status){
+      var dup=findExistingItem(cand, seasonInfo);
+      if(dup){
+        closeSheet();
+        toast("すでに登録されています（"+STATUS_LABEL[dup.status]+"）");
+        openDetail(dup.id);
+        return;
+      }
       var item = seasonInfo ? makeSeasonItem(cand, seasonInfo, status) : makeItem(cand, status);
       state.items.push(item); save(); render(); closeSheet();
       toast(STATUS_LABEL[status]+"に追加しました");
@@ -1335,6 +1353,27 @@
     };
     pushHistory(item, status);
     return item;
+  }
+
+  /* ---------- 重複登録の防止（2026-10-02追加） ---------- */
+  // 同じ作品がどの棚にも重複して登録されないようにするための判定。
+  // TMDB作品：tmdbId＋種別＋シーズン番号（作品全体はnull）が一致したら同一とみなす
+  // （シーズン別登録と作品全体登録は別物として扱い、互いには重複判定しない＝既存のシーズン切替機能とは独立）。
+  // 手動追加（TMDBに無い作品）：tmdbIdが無いため、種別＋タイトル（前後空白を除いた完全一致）で判定する。
+  // 見つかった場合は現在の棚（status）に関わらず「既に登録済み」として扱う（棚移動は詳細シートの方で行う）。
+  function findExistingItem(cand, seasonInfo){
+    var seasonNum = seasonInfo ? seasonInfo.seasonNumber : null;
+    if(cand && cand.tmdbId){
+      return state.items.filter(function(it){
+        if(it.tmdbId!==cand.tmdbId || it.mediaType!==cand.mediaType) return false;
+        return (it.seasonNumber==null)===(seasonNum==null) && (seasonNum==null || it.seasonNumber===seasonNum);
+      })[0] || null;
+    }
+    var t=((cand&&cand.title)||"").trim();
+    if(!t) return null;
+    return state.items.filter(function(it){
+      return it.manual && it.mediaType===(cand&&cand.mediaType) && (it.title||"").trim()===t;
+    })[0] || null;
   }
 
   // Best-effort recovery of series-level info for items created before showTitle
@@ -1451,7 +1490,15 @@
       // so isAnimeItem()/typeLabelOf() treat it exactly like an anime search result.
       var mediaType = curType==="anime" ? "tv" : curType;
       var genreIds = curType==="anime" ? [ANIME_GENRE_ID] : [];
-      var item=makeItem({title:title, mediaType:mediaType, year:"", overview:"", posterPath:null, genreIds:genreIds}, status);
+      var cand={title:title, mediaType:mediaType, year:"", overview:"", posterPath:null, genreIds:genreIds};
+      var dup=findExistingItem(cand, null);
+      if(dup){
+        closeSheet();
+        toast("すでに登録されています（"+STATUS_LABEL[dup.status]+"）");
+        openDetail(dup.id);
+        return;
+      }
+      var item=makeItem(cand, status);
       item.memo=memo;
       state.items.push(item); save(); render(); closeSheet();
       toast(STATUS_LABEL[status]+"に追加しました");
@@ -1776,7 +1823,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem };
 
   load();
   render();
