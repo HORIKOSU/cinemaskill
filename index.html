@@ -24,7 +24,7 @@
   body{
     font-family:'M PLUS Rounded 1c',-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
     background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased;
-    padding-bottom:calc(160px + env(safe-area-inset-bottom));
+    padding-bottom:calc(144px + env(safe-area-inset-bottom));
     line-height:1.5;
   }
   header.app{ background:var(--bg); padding:calc(12px + env(safe-area-inset-top)) 16px 0; }
@@ -101,17 +101,17 @@
   .empty .big{font-size:44px;opacity:.5;margin-bottom:8px}
   .empty p{margin:4px 0;font-size:14px}
 
-  .fab{ position:fixed;left:50%;transform:translateX(-50%); bottom:calc(76px + env(safe-area-inset-bottom));z-index:30; display:flex;align-items:center;gap:9px; background:var(--accent);color:#fff;border:none;cursor:pointer; padding:15px 26px;border-radius:999px;font-size:16px;font-weight:800;font-family:inherit; box-shadow:0 8px 24px rgba(28,36,64,.42); }
+  .fab{ position:fixed;right:16px; bottom:calc(76px + env(safe-area-inset-bottom));z-index:30; display:flex;align-items:center;justify-content:center; width:54px;height:54px; background:var(--accent);color:#fff;border:none;cursor:pointer; padding:0;border-radius:50%; font-family:inherit; box-shadow:0 8px 20px rgba(28,36,64,.42); }
   .fab:active{background:var(--accent-dk)}
-  .fab svg{width:20px;height:20px}
+  .fab svg{width:24px;height:24px}
   /* タップ時のエラスティック・スクワッシュ演出：横に伸びて縦が縮み、弾んで戻る */
   .fab.squash{ animation:fabSquash .55s cubic-bezier(.34,1.56,.64,1); }
   @keyframes fabSquash{
-    0%{ transform:translateX(-50%) scale(1,1) }
-    28%{ transform:translateX(-50%) scale(1.09,.90) }
-    52%{ transform:translateX(-50%) scale(.93,1.07) }
-    74%{ transform:translateX(-50%) scale(1.03,.98) }
-    100%{ transform:translateX(-50%) scale(1,1) }
+    0%{ transform:scale(1,1) }
+    28%{ transform:scale(1.09,.90) }
+    52%{ transform:scale(.93,1.07) }
+    74%{ transform:scale(1.03,.98) }
+    100%{ transform:scale(1,1) }
   }
 
   .overlay{ position:fixed;inset:0;z-index:50;background:rgba(14,16,28,.55); display:none;align-items:flex-end;justify-content:center; }
@@ -313,9 +313,8 @@
   </div>
 </main>
 
-<button class="fab" id="fab">
+<button class="fab" id="fab" aria-label="追加する">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-  追加する
 </button>
 
 <div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
@@ -678,7 +677,7 @@
     var el=document.getElementById("list");
     if(!list.length){
       var msg = state.tab==="want" ? "まだ「観たい」作品がありません" : state.tab==="watching" ? "今、観てる作品はありません" : "まだ「観た」作品がありません";
-      el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">🎬</div><p>'+msg+'</p><p>右下の「＋ 追加する」から登録できます</p></div>';
+      el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">🎬</div><p>'+msg+'</p><p>右下の「＋」から登録できます</p></div>';
       return;
     }
     el.innerHTML=list.map(cardHtml).join("");
