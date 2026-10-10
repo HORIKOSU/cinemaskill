@@ -702,7 +702,7 @@
     var counts={};
     wantItemsForProviders().forEach(function(it){
       if(it.wp && it.wp.flatrate){
-        it.wp.flatrate.forEach(function(p){ if(p && p.name){ counts[p.name]=(counts[p.name]||0)+1; } });
+        it.wp.flatrate.forEach(function(p){ if(p && p.name && !isAdsTierProvider(p.name)){ counts[p.name]=(counts[p.name]||0)+1; } });
       }
     });
     return Object.keys(counts).sort(function(a,b){
@@ -749,7 +749,7 @@
     box.style.display="flex";
     var h='<button class="chip'+(state.providerFilter==="all"?" cur":"")+'" data-provider="all">すべての配信</button>';
     providers.forEach(function(name){
-      h+='<button class="chip'+(state.providerFilter===name?" cur":"")+'" data-provider="'+esc(name)+'">'+esc(name)+'のみ</button>';
+      h+='<button class="chip'+(state.providerFilter===name?" cur":"")+'" data-provider="'+esc(name)+'">'+esc(name)+'</button>';
     });
     if(state.providerLoading){
       h+='<span class="chip" style="pointer-events:none;opacity:.6">確認中…</span>';
@@ -815,18 +815,21 @@
 
   /* ---------- TMDB watch providers ---------- */
   var WP_MAX_AGE_MS = 14*24*60*60*1000; // re-check after 2 weeks (lineups change)
+  // 「Netflix Standard with Ads」「Amazon Prime Video with Ads」など広告つきプランは通常プランと重複するため表示・絞り込みの対象外にする（2026-10-10追加）
+  function isAdsTierProvider(name){ return /with\s+ads/i.test(String(name||"")); }
   function fetchWatchProviders(item){
     if(!item.tmdbId) return Promise.reject({code:"NO_KEY"});
     return tmdbFetch(item.mediaType+"/"+item.tmdbId+"/watch/providers", {})
     .then(function(data){
       var jp=(data.results&&data.results.JP)||null;
-      function names(arr){ return (arr||[]).map(function(p){ return {name:p.provider_name, logo:p.logo_path}; }); }
+      function names(arr){ return (arr||[]).filter(function(p){ return !isAdsTierProvider(p.provider_name); }).map(function(p){ return {name:p.provider_name, logo:p.logo_path}; }); }
       return { at: nowIso(), flatrate: names(jp&&jp.flatrate), rent: names(jp&&jp.rent), buy: names(jp&&jp.buy), link: (jp&&jp.link)||null };
     });
   }
   function wpLogoUrl(path){ return "https://image.tmdb.org/t/p/w92"+path; }
   function wpGroupHtml(label, list){
-    if(!list || !list.length) return "";
+    list=(list||[]).filter(function(p){ return p && !isAdsTierProvider(p.name); }); // 保存済み(旧キャッシュ)の広告つきプランも除外
+    if(!list.length) return "";
     return '<div class="wp-group"><div class="wp-group-label">'+label+'</div><div class="wp-logos">'
       + list.map(function(p){ return p.logo ? '<img class="wp-logo" src="'+wpLogoUrl(p.logo)+'" alt="'+esc(p.name)+'" title="'+esc(p.name)+'" loading="lazy">' : ''; }).join("")
       + '</div></div>';
@@ -1598,8 +1601,8 @@
     var memoLabel = item.status==="done" ? "感想・レビュー" : item.status==="watching" ? "メモ（何話まで観たか等）" : "メモ（気になる理由など）";
     h+='<div class="field"><label>'+memoLabel+'</label><textarea id="memoInput" placeholder="自由にメモできます">'+esc(item.memo||"")+'</textarea></div>';
     if(item.tmdbId){
-      h+='<div class="cast-wrap"><div class="cast-head"><span class="cast-title">🎭 キャスト</span><button class="cast-refresh" id="castRefreshBtn">更新</button></div><div id="castBody"></div></div>';
       h+='<div class="wp-wrap"><div class="wp-head"><span class="wp-title">📺 配信状況（日本）</span><button class="wp-refresh" id="wpRefreshBtn">更新</button></div><div id="wpBody"></div></div>';
+      h+='<div class="cast-wrap"><div class="cast-head"><span class="cast-title">🎭 キャスト</span><button class="cast-refresh" id="castRefreshBtn">更新</button></div><div id="castBody"></div></div>';
     }
     h+=historyHtml(item);
     h+='<button class="btn danger" id="delBtn">この作品を削除</button>';
@@ -1825,7 +1828,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider };
 
   load();
   render();
