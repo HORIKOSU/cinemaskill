@@ -946,6 +946,34 @@
     });
   }
 
+  // 登録前のプレビュー画面（検索結果・出演作一覧・シーズン選択の前）でもキャストを見られるようにする（2026-10-13追加）
+  // 登録済み項目のように item.credits へ保存はせず、メモリ上のキャッシュだけ使う。
+  var previewCreditsCache={};
+  function previewCastWrapHtml(cand){
+    if(!cand || !cand.tmdbId) return "";
+    return '<div class="cast-wrap"><div class="cast-head"><span class="cast-title">🎭 キャスト</span></div><div id="castBody"></div></div>';
+  }
+  function renderPreviewCast(cand){
+    if(!cand || !cand.tmdbId) return;
+    var box=document.getElementById("castBody");
+    if(!box) return;
+    box.onclick=function(e){
+      var card=e.target.closest(".cast-item[data-person-id]");
+      if(!card) return;
+      openPersonSheet(card.dataset.personId, card.dataset.personName);
+    };
+    var key=cand.mediaType+":"+cand.tmdbId;
+    if(previewCreditsCache[key]){ box.innerHTML=creditsBodyHtml(previewCreditsCache[key]); return; }
+    box.innerHTML='<div class="searching"><span class="spinner"></span> キャスト情報を確認中…</div>';
+    fetchCredits(cand).then(function(credits){
+      previewCreditsCache[key]=credits;
+      box.innerHTML=creditsBodyHtml(credits);
+    }).catch(function(err){
+      if(err&&err.code==="NO_KEY"){ box.innerHTML='<div class="cast-empty">合言葉を設定するとキャスト情報を確認できます</div>'; return; }
+      box.innerHTML='<div class="cast-empty">キャスト情報を取得できませんでした</div>';
+    });
+  }
+
   /* ---------- person filmography (tap a cast member) ---------- */
   function personCandidateFrom(it){
     var isMovie = it.media_type==="movie";
@@ -1209,8 +1237,10 @@
       + '<div class="shelf-choices two">'
       +   '<button class="shelf-btn" id="addModeWhole">作品全体で登録</button>'
       +   '<button class="shelf-btn" id="addModeSeason">シーズンごとに登録</button>'
-      + '</div>';
+      + '</div>'
+      + previewCastWrapHtml(cand);
     openSheet(h);
+    renderPreviewCast(cand);
     document.getElementById("addModeWhole").onclick=function(){ openShelfPickFor(cand); };
     document.getElementById("addModeSeason").onclick=function(){ openSeasonList(cand); };
   }
@@ -1308,8 +1338,10 @@
       + '<div class="resmeta"><span class="type-badge">'+typeLabel+'</span>'+(cand.year?esc(cand.year)+"年":"")+'</div>'
       + '<div class="m">'+esc(dispOverview||"（あらすじ情報なし）")+'</div></div></div>'
       + '<h2 style="font-size:14px;margin-top:4px">棚を選ぶ</h2>'
-      + shelfChoicesHtml(null);
+      + shelfChoicesHtml(null)
+      + previewCastWrapHtml(cand);
     openSheet(h);
+    renderPreviewCast(cand);
     bindShelfChoices(function(status){
       var dup=findExistingItem(cand, seasonInfo);
       if(dup){
@@ -1828,7 +1860,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast };
 
   load();
   render();
