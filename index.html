@@ -1158,10 +1158,10 @@
   function fetchPersonProfile(personId){
     var key=String(personId);
     if(personProfileCache[key]) return personProfileCache[key];
-    var pr=tmdbFetch("person/"+personId, {language:"ja-JP"}).then(function(ja){
+    var pr=tmdbFetch("person/"+personId, {language:"ja-JP", append_to_response:"external_ids"}).then(function(ja){
       var bio=(ja.biography||"").trim();
       var base={ name:ja.name||"", photo:ja.profile_path||null, birthday:ja.birthday||"", deathday:ja.deathday||"",
-        place:ja.place_of_birth||"", aka:(ja.also_known_as||[]).slice(0,3), dept:ja.known_for_department||"", bio:bio, bioLang:"ja" };
+        place:ja.place_of_birth||"", aka:(ja.also_known_as||[]).slice(0,3), akaAll:(ja.also_known_as||[]), wikidataId:(ja.external_ids&&ja.external_ids.wikidata_id)||"", dept:ja.known_for_department||"", bio:bio, bioLang:"ja" };
       if(bio) return base;
       return tmdbFetch("person/"+personId, {language:"en-US"}).then(function(en){
         var eb=(en.biography||"").trim();
@@ -1172,6 +1172,61 @@
     });
     personProfileCache[key]=pr;
     pr.catch(function(){ delete personProfileCache[key]; });
+    return pr;
+  }
+  /* ---------- 漢字名の読み方（TMDBには読みがないため、別名→Wikidata→Wikipediaの順で探す） ---------- */
+  var personReadingCache={};
+  function hasKanji(str){ return /[\u4e00-\u9fff\u3400-\u4dbf々]/.test(str||""); }
+  function isKanaOnly(str){ return !!str && /^[\u3040-\u309f\u30a0-\u30ffー・･\s　]+$/.test(str) && /[\u3040-\u309f\u30a0-\u30ff]/.test(str); }
+  function normReading(str){ return String(str||"").replace(/[\s　]+/g," ").trim(); }
+  function wikidataApi(params){
+    var qs=Object.keys(params).map(function(k){ return k+"="+encodeURIComponent(params[k]); }).join("&");
+    return fetch("https://www.wikidata.org/w/api.php?"+qs+"&format=json&origin=*").then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+  }
+  function readingFromWikipediaIntro(text){
+    // 例: 「浅野 忠信（あさの ただのぶ、1973年…）」→ 最初のカッコ内の読み部分
+    var m=/[（(]([^）)、,，]+)/.exec((text||"").slice(0,120));
+    if(!m) return "";
+    var r=normReading(m[1]);
+    return isKanaOnly(r)?r:"";
+  }
+  function fetchReadingFromWikidata(qid){
+    return wikidataApi({action:"wbgetclaims", entity:qid, property:"P1814"}).then(function(d){
+      var claims=(d.claims&&d.claims.P1814)||[], best="";
+      claims.forEach(function(c){
+        var v=c.mainsnak&&c.mainsnak.datavalue&&c.mainsnak.datavalue.value;
+        if(v&&typeof v==="object") v=v.text;
+        v=normReading(v);
+        if(!best && isKanaOnly(v)) best=v;
+      });
+      if(best) return best;
+      // P1814が無い場合は日本語版Wikipediaの冒頭文のカッコ内から読みを拾う
+      return wikidataApi({action:"wbgetentities", ids:qid, props:"sitelinks", sitefilter:"jawiki"}).then(function(e){
+        var sl=e.entities&&e.entities[qid]&&e.entities[qid].sitelinks&&e.entities[qid].sitelinks.jawiki;
+        if(!sl||!sl.title) return "";
+        return fetch("https://ja.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&exchars=120&redirects=1&format=json&origin=*&titles="+encodeURIComponent(sl.title))
+          .then(function(r){ return r.json(); }).then(function(w){
+            var pages=(w.query&&w.query.pages)||{}, k=Object.keys(pages)[0];
+            return readingFromWikipediaIntro(k&&pages[k].extract);
+          });
+      });
+    });
+  }
+  // 戻り値: Promise<string>（見つからない／漢字を含まない名前は ""）。失敗しても例外は出さない。
+  function fetchPersonReading(personId, name, pf){
+    var key=String(personId);
+    if(personReadingCache[key]) return personReadingCache[key];
+    var nm=name||(pf&&pf.name)||"";
+    var pr;
+    if(!hasKanji(nm)) pr=Promise.resolve("");
+    else {
+      var fromAka="";
+      ((pf&&pf.akaAll)||[]).forEach(function(a){ if(!fromAka && isKanaOnly(a)) fromAka=normReading(a); });
+      if(fromAka) pr=Promise.resolve(fromAka);
+      else if(pf&&pf.wikidataId) pr=fetchReadingFromWikidata(pf.wikidataId).catch(function(){ return ""; });
+      else pr=Promise.resolve("");
+    }
+    personReadingCache[key]=pr;
     return pr;
   }
   function personProfileHtml(pf, personName){
@@ -1191,7 +1246,7 @@
     }
     if(pf.place) rows+='<div class="pf-row"><span class="k">出身地</span>'+esc(pf.place)+'</div>';
     if(pf.dept) rows+='<div class="pf-row"><span class="k">職業</span>'+esc(PROFILE_DEPT[pf.dept]||pf.dept)+'</div>';
-    var main='<div class="pf-main">'+(aka.length?'<div class="pf-aka">別名：'+esc(aka.join(" / "))+'</div>':'')+(rows||'<div class="pf-row" style="color:var(--muted)">プロフィール情報なし</div>')+'</div>';
+    var main='<div class="pf-main">'+(aka.length?'<div class="pf-aka">別名：'+esc(aka.join(" / "))+'</div>':'')+'<div class="pf-row" id="pfYomi" style="display:none"></div>'+(rows||'<div class="pf-row" style="color:var(--muted)">プロフィール情報なし</div>')+'</div>';
     var html='<div class="person-profile-in" style="display:flex;gap:14px;align-items:flex-start;width:100%">'+photo+main+'</div>';
     return html;
   }
@@ -1209,6 +1264,13 @@
       box=document.getElementById("personProfile"); bioBox=document.getElementById("personBio");
       if(!box) return;
       box.innerHTML=personProfileHtml(pf, personName);
+      if(isFavActor(personId)) setFavActorPhoto(personId, pf.photo);
+      fetchPersonReading(personId, personName||pf.name, pf).then(function(yomi){
+        var y=document.getElementById("pfYomi");
+        if(y && yomi && document.getElementById("personProfile")===box){
+          y.innerHTML='<span class="k">読み方</span>'+esc(yomi); y.style.display="";
+        }
+      });
       if(bioBox){
         bioBox.innerHTML=personBioHtml(pf);
         var bio=document.getElementById("pfBio"), more=document.getElementById("pfMore");
@@ -1245,6 +1307,8 @@
       }else{
         addFavActor({personId:personId, name:personName||"", profilePath:null});
         favBtn.textContent="★ お気に入り済み"; favBtn.classList.add("on");
+        // 写真もあわせて保存（プロフィール取得済みなら即時、未取得なら取得後に反映）
+        fetchPersonProfile(personId).then(function(pf){ setFavActorPhoto(personId, pf.photo); }).catch(function(){});
       }
     };
     function renderPersonResults(){
@@ -1289,6 +1353,29 @@
     return '<div class="cast-photo ph">'+ic("user","nm")+'</div>';
   }
 
+  // 写真が未保存のお気に入り俳優（人物ページから登録した人など）の写真をTMDBから補完して保存する。
+  // 写真が元々無い人は photoChecked を立てて、次回以降は再取得しない。
+  function setFavActorPhoto(personId, path){
+    var changed=false;
+    state.favActors.forEach(function(p){
+      if(String(p.personId)!==String(personId)) return;
+      if(path && p.profilePath!==path){ p.profilePath=path; changed=true; }
+      if(!p.photoChecked){ p.photoChecked=true; changed=true; }
+    });
+    if(changed) saveFavActors();
+    return changed;
+  }
+  function backfillFavActorPhotos(){
+    var targets=state.favActors.filter(function(p){ return !p.profilePath && !p.photoChecked; });
+    if(!targets.length) return Promise.resolve(false);
+    return Promise.all(targets.map(function(p){
+      return fetchPersonProfile(p.personId).then(function(pf){ return setFavActorPhoto(p.personId, pf.photo); }).catch(function(){ return false; });
+    })).then(function(r){
+      var any=r.some(Boolean);
+      if(any && document.getElementById("favActorsList")) renderFavActorsList();
+      return any;
+    });
+  }
   function openFavActorsSheet(){
     var h='<div class="grip"></div><h2>'+ic("star")+'お気に入り俳優</h2>'
       + '<div class="keynote">俳優名で検索して、お気に入りに登録できます。登録した俳優をタップすると出演作の一覧が見られます。</div>'
@@ -1298,6 +1385,7 @@
       + '<div id="favActorsList"></div>';
     openSheet(h);
     renderFavActorsList();
+    backfillFavActorPhotos();
     var qEl=document.getElementById("actorSearchQ");
     function doSearch(){
       var q=(qEl.value||"").trim();
@@ -2073,7 +2161,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, fetchPersonProfile:fetchPersonProfile, renderPersonProfile:renderPersonProfile, ageFromBirthday:ageFromBirthday, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast, rankInfo:rankInfo, checkRankUp:checkRankUp, countUp:countUp, renderHero:renderHero };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, fetchPersonProfile:fetchPersonProfile, fetchPersonReading:fetchPersonReading, readingFromWikipediaIntro:readingFromWikipediaIntro, renderPersonProfile:renderPersonProfile, ageFromBirthday:ageFromBirthday, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, backfillFavActorPhotos:backfillFavActorPhotos, setFavActorPhoto:setFavActorPhoto, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast, rankInfo:rankInfo, checkRankUp:checkRankUp, countUp:countUp, renderHero:renderHero };
 
   load();
   render();
