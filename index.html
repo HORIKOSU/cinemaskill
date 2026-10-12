@@ -153,6 +153,21 @@
   .sheet-x button{pointer-events:auto;width:44px;height:44px;flex:0 0 auto;margin-top:4px;border-radius:50%;border:none;background:var(--panel);color:var(--ink);font-size:19px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 10px rgba(28,36,64,.20),0 0 0 1px rgba(0,0,0,.06)}
   .sheet-x button:active{background:var(--line);transform:scale(.92)}
   .sheet h2{font-size:17px;margin:0 0 12px}
+  .person-profile{display:flex;gap:14px;align-items:flex-start;margin:4px 0 14px}
+  .person-profile:empty{display:none}
+  .pf-photo{width:84px;height:126px;flex:0 0 auto;border-radius:12px;object-fit:cover;background:var(--accent-soft);box-shadow:0 2px 8px rgba(0,0,0,.14)}
+  .pf-photo.ph{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--accent-dk);opacity:.45}
+  .pf-main{flex:1;min-width:0}
+  .pf-row{font-size:12px;color:var(--ink);line-height:1.6;margin-top:2px}
+  .pf-row .k{color:var(--muted);font-weight:800;margin-right:6px;font-size:11px}
+  .pf-aka{font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:4px}
+  .pf-skel{height:126px;width:100%;border-radius:12px;background:linear-gradient(90deg,var(--accent-soft),#f1efe9,var(--accent-soft));background-size:200% 100%;animation:pfSkel 1.2s linear infinite}
+  @keyframes pfSkel{to{background-position:-200% 0}}
+  .pf-bio-wrap{margin:-4px 0 14px}
+  .pf-bio{font-size:12.5px;line-height:1.75;color:var(--ink);white-space:pre-line;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+  .pf-bio.open{-webkit-line-clamp:unset;display:block}
+  .pf-bio-note{font-size:10.5px;color:var(--muted);margin-bottom:3px}
+  .pf-more{border:none;background:none;color:var(--accent);font-weight:800;font-size:12px;font-family:inherit;padding:4px 0;cursor:pointer}
   .person-fav-btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font-size:12.5px;font-weight:800;border-radius:999px;padding:7px 14px;cursor:pointer;font-family:inherit;margin:-6px 0 14px}
   .person-fav-btn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-dk)}
   .person-fav-btn:active{transform:scale(.96)}
@@ -1123,10 +1138,97 @@
     }
     return sorted.slice(0, PERSON_RESULTS_MAX);
   }
+  /* ---------- person profile (人物ページ上部のプロフィール) ---------- */
+  var personProfileCache={};
+  var PROFILE_DEPT={Acting:"俳優",Directing:"監督",Writing:"脚本家",Production:"プロデューサー",Sound:"音楽",Camera:"撮影",Editing:"編集",Crew:"スタッフ",Art:"美術","Visual Effects":"VFX",Costume:"衣装","Costume & Make-Up":"衣装・メイク",Lighting:"照明"};
+  function ageFromBirthday(birthday, deathday){
+    var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday||""); if(!m) return null;
+    var end=new Date();
+    var d=/^(\d{4})-(\d{2})-(\d{2})$/.exec(deathday||"");
+    if(d) end=new Date(+d[1], +d[2]-1, +d[3]);
+    var age=end.getFullYear()-(+m[1]);
+    if(end.getMonth()<(+m[2]-1) || (end.getMonth()===(+m[2]-1) && end.getDate()<(+m[3]))) age--;
+    return age>=0&&age<150?age:null;
+  }
+  function jpDate(str){
+    var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(str||""); if(!m) return "";
+    return m[1]+"年"+(+m[2])+"月"+(+m[3])+"日";
+  }
+  // person/{id} を取得。日本語の自己紹介が空なら英語で再取得（bioLang:"en"）。結果はメモリにキャッシュ。
+  function fetchPersonProfile(personId){
+    var key=String(personId);
+    if(personProfileCache[key]) return personProfileCache[key];
+    var pr=tmdbFetch("person/"+personId, {language:"ja-JP"}).then(function(ja){
+      var bio=(ja.biography||"").trim();
+      var base={ name:ja.name||"", photo:ja.profile_path||null, birthday:ja.birthday||"", deathday:ja.deathday||"",
+        place:ja.place_of_birth||"", aka:(ja.also_known_as||[]).slice(0,3), dept:ja.known_for_department||"", bio:bio, bioLang:"ja" };
+      if(bio) return base;
+      return tmdbFetch("person/"+personId, {language:"en-US"}).then(function(en){
+        var eb=(en.biography||"").trim();
+        if(eb){ base.bio=eb; base.bioLang="en"; }
+        if(!base.place && en.place_of_birth) base.place=en.place_of_birth;
+        return base;
+      }).catch(function(){ return base; });
+    });
+    personProfileCache[key]=pr;
+    pr.catch(function(){ delete personProfileCache[key]; });
+    return pr;
+  }
+  function personProfileHtml(pf, personName){
+    var photo=pf.photo
+      ? '<img class="pf-photo" src="https://image.tmdb.org/t/p/w185'+pf.photo+'" alt="" referrerpolicy="no-referrer" data-fb-icon="user" data-fb-cls="pf-photo" onerror="window.__cmImgFallback(this)">'
+      : '<div class="pf-photo ph">'+ic("user","nm")+'</div>';
+    var shown=displayName(personName||pf.name);
+    var aka=pf.aka.filter(function(a){ return a && a!==shown && a!==personName && a!==pf.name; });
+    var rows="";
+    if(pf.birthday){
+      var age=ageFromBirthday(pf.birthday, pf.deathday);
+      rows+='<div class="pf-row"><span class="k">生年月日</span>'+esc(jpDate(pf.birthday))+(age!==null&&!pf.deathday?'（'+age+'歳）':'')+'</div>';
+    }
+    if(pf.deathday){
+      var dAge=ageFromBirthday(pf.birthday, pf.deathday);
+      rows+='<div class="pf-row"><span class="k">没年月日</span>'+esc(jpDate(pf.deathday))+(dAge!==null?'（享年'+dAge+'）':'')+'</div>';
+    }
+    if(pf.place) rows+='<div class="pf-row"><span class="k">出身地</span>'+esc(pf.place)+'</div>';
+    if(pf.dept) rows+='<div class="pf-row"><span class="k">職業</span>'+esc(PROFILE_DEPT[pf.dept]||pf.dept)+'</div>';
+    var main='<div class="pf-main">'+(aka.length?'<div class="pf-aka">別名：'+esc(aka.join(" / "))+'</div>':'')+(rows||'<div class="pf-row" style="color:var(--muted)">プロフィール情報なし</div>')+'</div>';
+    var html='<div class="person-profile-in" style="display:flex;gap:14px;align-items:flex-start;width:100%">'+photo+main+'</div>';
+    return html;
+  }
+  function personBioHtml(pf){
+    if(!pf.bio) return "";
+    return '<div class="pf-bio-wrap">'
+      + (pf.bioLang==="en"?'<div class="pf-bio-note">日本語の紹介文がないため英語で表示しています</div>':'')
+      + '<div class="pf-bio" id="pfBio">'+esc(pf.bio)+'</div>'
+      + '<button class="pf-more" type="button" id="pfMore" style="display:none">続きを読む</button></div>';
+  }
+  function renderPersonProfile(personId, personName){
+    var box=document.getElementById("personProfile"), bioBox=document.getElementById("personBio");
+    if(!box) return Promise.resolve();
+    return fetchPersonProfile(personId).then(function(pf){
+      box=document.getElementById("personProfile"); bioBox=document.getElementById("personBio");
+      if(!box) return;
+      box.innerHTML=personProfileHtml(pf, personName);
+      if(bioBox){
+        bioBox.innerHTML=personBioHtml(pf);
+        var bio=document.getElementById("pfBio"), more=document.getElementById("pfMore");
+        if(bio && more){
+          if(bio.scrollHeight>bio.clientHeight+2) more.style.display="";
+          more.onclick=function(){
+            var open=bio.classList.toggle("open");
+            more.textContent=open?"閉じる":"続きを読む";
+          };
+        }
+      }
+    }).catch(function(){
+      var b=document.getElementById("personProfile"); if(b) b.innerHTML="";
+    });
+  }
   function openPersonSheet(personId, personName){
     var favNow=isFavActor(personId);
     var personFullList=null, personSortMode="pop"; // 初期表示は従来通り人気順
     var h='<div class="grip"></div><h2>'+esc(displayName(personName))+'の出演作</h2>'
+      + '<div class="person-profile" id="personProfile"><div class="pf-skel"></div></div><div id="personBio"></div>'
       + '<button class="person-fav-btn'+(favNow?" on":"")+'" id="personFavBtn">'+(favNow?"★ お気に入り済み":"☆ お気に入りに追加")+'</button>'
       + '<div class="shelf-choices two" id="personSortChoices" style="margin-bottom:16px">'
       +   '<button class="shelf-btn cur" data-sort="pop">人気順</button>'
@@ -1157,6 +1259,7 @@
         renderPersonResults();
       };
     });
+    renderPersonProfile(personId, personName);
     fetchPersonCredits(personId).then(function(list){
       personFullList=list;
       renderPersonResults();
@@ -1970,7 +2073,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast, rankInfo:rankInfo, checkRankUp:checkRankUp, countUp:countUp, renderHero:renderHero };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, fetchPersonProfile:fetchPersonProfile, renderPersonProfile:renderPersonProfile, ageFromBirthday:ageFromBirthday, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast, rankInfo:rankInfo, checkRankUp:checkRankUp, countUp:countUp, renderHero:renderHero };
 
   load();
   render();
