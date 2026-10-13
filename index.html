@@ -168,6 +168,10 @@
   .pf-bio.open{-webkit-line-clamp:unset;display:block}
   .pf-bio-note{font-size:10.5px;color:var(--muted);margin-bottom:3px}
   .pf-more{border:none;background:none;color:var(--accent);font-weight:800;font-size:12px;font-family:inherit;padding:4px 0;cursor:pointer}
+  .pf-fam{margin-top:6px}
+  .pf-fam .pf-row{margin-top:3px}
+  .pf-rel{color:var(--accent);font-weight:800;text-decoration:underline;text-decoration-color:var(--accent-soft);text-underline-offset:3px;cursor:pointer;background:none;border:none;font-family:inherit;font-size:12px;padding:0}
+  .pf-rel-tag{font-size:10.5px;color:var(--muted);margin-left:2px}
   .person-fav-btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font-size:12.5px;font-weight:800;border-radius:999px;padding:7px 14px;cursor:pointer;font-family:inherit;margin:-6px 0 14px}
   .person-fav-btn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-dk)}
   .person-fav-btn:active{transform:scale(.96)}
@@ -1229,6 +1233,73 @@
     personReadingCache[key]=pr;
     return pr;
   }
+  /* ---------- 家族（配偶者／俳優の親・子）: Wikidataから取得 ---------- */
+  var personFamilyCache={};
+  var FAMILY_MAX_SPOUSE=5, FAMILY_MAX_CHILD=6;
+  // 戻り値: Promise<[{rel:"spouse"|"father"|"mother"|"child", name, tmdb, actor, ended, cause}]>
+  // 配偶者は職業を問わず全員、親・子は「俳優」の人だけを返す。失敗時は[]。
+  function fetchPersonFamily(personId, pf){
+    var key=String(personId);
+    if(personFamilyCache[key]) return personFamilyCache[key];
+    var qid=pf&&pf.wikidataId;
+    var pr;
+    if(!qid || !/^Q\d+$/.test(qid)) pr=Promise.resolve([]);
+    else {
+      var q='SELECT ?rel ?person ?personLabel ?tmdb ?start ?end ?cause ?isActor WHERE { VALUES ?s { wd:'+qid+' } '
+        +'{ ?s p:P26 ?st . ?st ps:P26 ?person . BIND("spouse" AS ?rel) OPTIONAL{?st pq:P580 ?start} OPTIONAL{?st pq:P582 ?end} OPTIONAL{?st pq:P1534 ?cause} } '
+        +'UNION { ?s wdt:P22 ?person . BIND("father" AS ?rel) } UNION { ?s wdt:P25 ?person . BIND("mother" AS ?rel) } UNION { ?s wdt:P40 ?person . BIND("child" AS ?rel) } '
+        +'OPTIONAL { ?person wdt:P4985 ?tmdb } '
+        +'BIND(EXISTS { ?person wdt:P106 ?o . ?o wdt:P279* wd:Q33999 } AS ?isActor) '
+        +'SERVICE wikibase:label { bd:serviceParam wikibase:language "ja,en". } }';
+      pr=fetch("https://query.wikidata.org/sparql?format=json&query="+encodeURIComponent(q))
+        .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+        .then(function(d){ return parseFamilyRows((d.results&&d.results.bindings)||[]); })
+        .catch(function(){ return []; });
+    }
+    personFamilyCache[key]=pr;
+    return pr;
+  }
+  function parseFamilyRows(rows){
+    var seen={}, out=[];
+    rows.forEach(function(b){
+      var rel=b.rel&&b.rel.value, uri=(b.person&&b.person.value)||"", name=(b.personLabel&&b.personLabel.value)||"";
+      if(!rel||!name||/^Q\d+$/.test(name)) return; // 名前（ラベル）が無い人は表示しない
+      var actor=!!(b.isActor && b.isActor.value==="true");
+      if(rel!=="spouse" && !actor) return; // 親・子は俳優だけ
+      var k=rel+"|"+uri; if(seen[k]){ var o=seen[k]; if(!o.tmdb&&b.tmdb) o.tmdb=b.tmdb.value; return; }
+      var cause=(b.cause&&b.cause.value||"").split("/").pop();
+      var e={rel:rel, name:name, tmdb:(b.tmdb&&b.tmdb.value)||"", actor:actor, ended:!!b.end||!!cause, cause:cause};
+      seen[k]=e; out.push(e);
+    });
+    return out;
+  }
+  function relLinkHtml(e){
+    var nm=esc(e.name);
+    return e.tmdb ? '<button type="button" class="pf-rel" data-pid="'+esc(e.tmdb)+'" data-name="'+esc(e.name)+'">'+nm+'</button>' : '<span>'+nm+'</span>';
+  }
+  function familyHtml(list){
+    if(!list||!list.length) return "";
+    var sp=list.filter(function(e){ return e.rel==="spouse"; }).sort(function(a,b){ return (a.ended?1:0)-(b.ended?1:0); }).slice(0,FAMILY_MAX_SPOUSE);
+    var par=list.filter(function(e){ return e.rel==="father"||e.rel==="mother"; });
+    var ch=list.filter(function(e){ return e.rel==="child"; });
+    var chTotal=ch.length; ch=ch.slice(0,FAMILY_MAX_CHILD);
+    var h="";
+    if(sp.length){
+      h+='<div class="pf-row"><span class="k">配偶者</span>'+sp.map(function(e){
+        var tag=e.ended?(e.cause==="Q4"?"死別":e.cause==="Q93190"?"離婚":"元"):"";
+        return relLinkHtml(e)+(tag?'<span class="pf-rel-tag">（'+tag+'）</span>':"");
+      }).join("、")+'</div>';
+    }
+    if(par.length){
+      h+='<div class="pf-row"><span class="k">俳優の親</span>'+par.map(function(e){
+        return relLinkHtml(e)+'<span class="pf-rel-tag">（'+(e.rel==="father"?"父":"母")+'）</span>';
+      }).join("、")+'</div>';
+    }
+    if(ch.length){
+      h+='<div class="pf-row"><span class="k">俳優の子</span>'+ch.map(relLinkHtml).join("、")+(chTotal>ch.length?'<span class="pf-rel-tag"> ほか'+(chTotal-ch.length)+'名</span>':"")+'</div>';
+    }
+    return h;
+  }
   function personProfileHtml(pf, personName){
     var photo=pf.photo
       ? '<img class="pf-photo" src="https://image.tmdb.org/t/p/w185'+pf.photo+'" alt="" referrerpolicy="no-referrer" data-fb-icon="user" data-fb-cls="pf-photo" onerror="window.__cmImgFallback(this)">'
@@ -1246,7 +1317,7 @@
     }
     if(pf.place) rows+='<div class="pf-row"><span class="k">出身地</span>'+esc(pf.place)+'</div>';
     if(pf.dept) rows+='<div class="pf-row"><span class="k">職業</span>'+esc(PROFILE_DEPT[pf.dept]||pf.dept)+'</div>';
-    var main='<div class="pf-main">'+(aka.length?'<div class="pf-aka">別名：'+esc(aka.join(" / "))+'</div>':'')+'<div class="pf-row" id="pfYomi" style="display:none"></div>'+(rows||'<div class="pf-row" style="color:var(--muted)">プロフィール情報なし</div>')+'</div>';
+    var main='<div class="pf-main">'+(aka.length?'<div class="pf-aka">別名：'+esc(aka.join(" / "))+'</div>':'')+'<div class="pf-row" id="pfYomi" style="display:none"></div>'+(rows||'<div class="pf-row" style="color:var(--muted)">プロフィール情報なし</div>')+'<div class="pf-fam" id="pfFamily"></div></div>';
     var html='<div class="person-profile-in" style="display:flex;gap:14px;align-items:flex-start;width:100%">'+photo+main+'</div>';
     return html;
   }
@@ -1265,6 +1336,14 @@
       if(!box) return;
       box.innerHTML=personProfileHtml(pf, personName);
       if(isFavActor(personId)) setFavActorPhoto(personId, pf.photo);
+      fetchPersonFamily(personId, pf).then(function(list){
+        var f=document.getElementById("pfFamily");
+        if(!f || document.getElementById("personProfile")!==box) return;
+        f.innerHTML=familyHtml(list);
+        Array.prototype.forEach.call(f.querySelectorAll(".pf-rel"),function(btn){
+          btn.onclick=function(){ openPersonSheet(btn.dataset.pid, btn.dataset.name); };
+        });
+      });
       fetchPersonReading(personId, personName||pf.name, pf).then(function(yomi){
         var y=document.getElementById("pfYomi");
         if(y && yomi && document.getElementById("personProfile")===box){
@@ -2161,7 +2240,7 @@
     rd.readAsText(f);
   });
 
-  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, fetchPersonProfile:fetchPersonProfile, fetchPersonReading:fetchPersonReading, readingFromWikipediaIntro:readingFromWikipediaIntro, renderPersonProfile:renderPersonProfile, ageFromBirthday:ageFromBirthday, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, backfillFavActorPhotos:backfillFavActorPhotos, setFavActorPhoto:setFavActorPhoto, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast, rankInfo:rankInfo, checkRankUp:checkRankUp, countUp:countUp, renderHero:renderHero };
+  window.__cinemaskill={ state:state, save:save, render:render, searchTMDB:searchTMDB, makeItem:makeItem, openDetail:openDetail, openAddSheet:openAddSheet, openManualSheet:openManualSheet, openTrendSheet:openTrendSheet, computeGenreStats:computeGenreStats, setTmdbKey:setTmdbKey, tmdbKey:tmdbKey, exportItems:exportItems, importItems:importItems, fetchWatchProviders:fetchWatchProviders, monthlyCounts:monthlyCounts, minDoneYear:minDoneYear, monthlyGraphHtml:monthlyGraphHtml, fetchCredits:fetchCredits, isAnimeItem:isAnimeItem, typeLabelOf:typeLabelOf, countsByType:countsByType, fetchPersonCredits:fetchPersonCredits, sortPersonCredits:sortPersonCredits, openPersonSheet:openPersonSheet, fetchPersonProfile:fetchPersonProfile, fetchPersonReading:fetchPersonReading, fetchPersonFamily:fetchPersonFamily, parseFamilyRows:parseFamilyRows, familyHtml:familyHtml, readingFromWikipediaIntro:readingFromWikipediaIntro, renderPersonProfile:renderPersonProfile, ageFromBirthday:ageFromBirthday, romajiToKatakana:romajiToKatakana, displayName:displayName, isAlphabetName:isAlphabetName, fetchTvSeasons:fetchTvSeasons, makeSeasonItem:makeSeasonItem, openPreview:openPreview, openAddModeChoice:openAddModeChoice, openSeasonList:openSeasonList, openSeasonBatchShelfPick:openSeasonBatchShelfPick, katakanaToHiragana:katakanaToHiragana, searchReadingKey:searchReadingKey, titleMatchesQuery:titleMatchesQuery, visibleItems:visibleItems, showInfoOf:showInfoOf, openSeasonEditSheet:openSeasonEditSheet, applySeasonChange:applySeasonChange, searchTMDBPerson:searchTMDBPerson, openFavActorsSheet:openFavActorsSheet, backfillFavActorPhotos:backfillFavActorPhotos, setFavActorPhoto:setFavActorPhoto, isFavActor:isFavActor, addFavActor:addFavActor, removeFavActor:removeFavActor, creditsIsUsable:creditsIsUsable, renderCastSection:renderCastSection, updateFavActorsBadge:updateFavActorsBadge, promptTmdbKey:promptTmdbKey, verifyPassphrase:verifyPassphrase, wantItemsForProviders:wantItemsForProviders, distinctFlatrateProviders:distinctFlatrateProviders, ensureWantProvidersFresh:ensureWantProvidersFresh, renderProviderChips:renderProviderChips, findExistingItem:findExistingItem, isAdsTierProvider:isAdsTierProvider, renderPreviewCast:renderPreviewCast, rankInfo:rankInfo, checkRankUp:checkRankUp, countUp:countUp, renderHero:renderHero };
 
   load();
   render();
